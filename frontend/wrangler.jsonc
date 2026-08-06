@@ -1,13 +1,17 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "mig-flares-frontend",
+  "name": "migflares",
   "compatibility_date": "2026-08-06",
   "observability": {
     "enabled": true
   },
+  "main": "worker.js",
   "assets": {
     "directory": "./dist",
     "not_found_handling": "single-page-application"
+  },
+  "vars": {
+    "API_ORIGIN": "https://migflares.onrender.com"
   },
   "compatibility_flags": [
     "nodejs_compat"
