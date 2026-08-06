@@ -246,6 +246,29 @@ export interface EmployeeStats {
   };
 }
 
+export interface SalaryMonth {
+  month: string;
+  label: string;
+  salaryAmount: number | null;
+  paid: boolean;
+  amount: number | null;
+  paymentDate: string | null;
+  method: string | null;
+}
+
+export interface TimeEntry {
+  id: string;
+  clockInAt: string;
+  clockOutAt: string | null;
+  hoursWorked: number | null;
+  notes: string | null;
+}
+
+export interface TimeEntriesResult {
+  current: TimeEntry | null;
+  entries: TimeEntry[];
+}
+
 export interface InventoryItem {
   id: string;
   name: string;

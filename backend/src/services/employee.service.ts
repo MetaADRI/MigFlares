@@ -1,4 +1,4 @@
-import { Prisma } from "@prisma/client";
+import { Prisma, PaymentMethod } from "@prisma/client";
 import { prisma } from "../config/database.js";
 import { ApiError } from "../utils/api-error.js";
 import { buildPageMeta, getPagination } from "../utils/pagination.js";
@@ -252,4 +252,183 @@ export async function deleteEmployee(id: string): Promise<void> {
     .catch(() => {
       throw ApiError.notFound("Employee not found");
     });
+}
+
+// ---------------------------------------------------------------------
+// Payroll — salary payments
+// ---------------------------------------------------------------------
+
+const monthLabel = (ym: string): string => {
+  const [y, m] = ym.split("-").map(Number);
+  return new Date(y ?? 0, (m ?? 1) - 1, 1).toLocaleDateString("en-ZM", {
+    month: "long",
+    year: "numeric",
+  });
+};
+
+/** Last `count` months as "YYYY-MM", current month first. */
+const lastMonths = (count: number): string[] => {
+  const result: string[] = [];
+  const now = new Date();
+  for (let i = 0; i < count; i += 1) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    result.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
+  }
+  return result;
+};
+
+export interface SalaryPaymentInput {
+  month: string;
+  amount?: number;
+  paymentDate?: Date;
+  method?: PaymentMethod;
+  notes?: string;
+}
+
+/** Per-month paid/unpaid history for the last six months. */
+export async function getSalaryHistory(id: string) {
+  const employee = await prisma.employee.findUnique({ where: { id } });
+  if (!employee) throw ApiError.notFound("Employee not found");
+
+  const payments = await prisma.salaryPayment.findMany({
+    where: { employeeId: id },
+    orderBy: { month: "desc" },
+  });
+  const byMonth = new Map(payments.map((p) => [p.month, p]));
+
+  const months = lastMonths(6).map((m) => {
+    const p = byMonth.get(m);
+    return {
+      month: m,
+      label: monthLabel(m),
+      salaryAmount: employee.salary ? Number(employee.salary) : null,
+      paid: Boolean(p),
+      amount: p ? Number(p.amount) : null,
+      paymentDate: p ? p.paymentDate.toISOString() : null,
+      method: p ? p.method : null,
+    };
+  });
+  return { months };
+}
+
+export async function recordSalaryPayment(
+  id: string,
+  input: SalaryPaymentInput,
+  createdById: string | undefined,
+  branchId: string | null,
+) {
+  const employee = await prisma.employee.findUnique({ where: { id } });
+  if (!employee) throw ApiError.notFound("Employee not found");
+
+  const amount = input.amount ?? (employee.salary ? Number(employee.salary) : null);
+  if (amount == null || amount < 0) {
+    throw ApiError.badRequest("No salary set for this employee — provide an amount");
+  }
+
+  const existing = await prisma.salaryPayment.findUnique({
+    where: { employeeId_month: { employeeId: id, month: input.month } },
+  });
+  if (existing) throw ApiError.conflict(`Salary already paid for ${monthLabel(input.month)}`);
+
+  const payment = await prisma.salaryPayment.create({
+    data: {
+      employeeId: id,
+      month: input.month,
+      amount: new Prisma.Decimal(amount),
+      paymentDate: input.paymentDate ?? new Date(),
+      method: input.method ?? "CASH",
+      notes: input.notes || null,
+      createdById,
+      branchId,
+    },
+  });
+
+  return {
+    month: payment.month,
+    label: monthLabel(payment.month),
+    salaryAmount: employee.salary ? Number(employee.salary) : null,
+    paid: true,
+    amount: Number(payment.amount),
+    paymentDate: payment.paymentDate.toISOString(),
+    method: payment.method,
+  };
+}
+
+// ---------------------------------------------------------------------
+// Time clock — clock in/out & shift history
+// ---------------------------------------------------------------------
+
+interface TimeEntryRow {
+  id: string;
+  clockInAt: Date;
+  clockOutAt: Date | null;
+  hoursWorked: Prisma.Decimal | null;
+  notes: string | null;
+}
+
+function serializeTimeEntry(e: TimeEntryRow) {
+  return {
+    id: e.id,
+    clockInAt: e.clockInAt.toISOString(),
+    clockOutAt: e.clockOutAt ? e.clockOutAt.toISOString() : null,
+    hoursWorked: e.hoursWorked ? Number(e.hoursWorked) : null,
+    notes: e.notes,
+  };
+}
+
+export async function getTimeEntries(id: string) {
+  const employee = await prisma.employee.findUnique({ where: { id } });
+  if (!employee) throw ApiError.notFound("Employee not found");
+
+  const current = await prisma.timeEntry.findFirst({
+    where: { employeeId: id, clockOutAt: null },
+    orderBy: { clockInAt: "desc" },
+  });
+  const entries = await prisma.timeEntry.findMany({
+    where: { employeeId: id },
+    orderBy: { clockInAt: "desc" },
+    take: 20,
+  });
+
+  return {
+    current: current ? serializeTimeEntry(current) : null,
+    entries: entries.map(serializeTimeEntry),
+  };
+}
+
+export async function clockIn(id: string, branchId: string | null) {
+  const employee = await prisma.employee.findUnique({ where: { id } });
+  if (!employee) throw ApiError.notFound("Employee not found");
+
+  const open = await prisma.timeEntry.findFirst({ where: { employeeId: id, clockOutAt: null } });
+  if (open) throw ApiError.conflict("Employee is already clocked in");
+
+  const entry = await prisma.timeEntry.create({
+    data: { employeeId: id, clockInAt: new Date(), branchId },
+  });
+  return serializeTimeEntry(entry);
+}
+
+export async function clockOut(id: string, notes?: string) {
+  const employee = await prisma.employee.findUnique({ where: { id } });
+  if (!employee) throw ApiError.notFound("Employee not found");
+
+  const open = await prisma.timeEntry.findFirst({
+    where: { employeeId: id, clockOutAt: null },
+    orderBy: { clockInAt: "desc" },
+  });
+  if (!open) throw ApiError.badRequest("Employee is not clocked in");
+
+  const clockOutAt = new Date();
+  const hours = Math.max(0, (clockOutAt.getTime() - open.clockInAt.getTime()) / 3_600_000);
+
+  const entry = await prisma.timeEntry.update({
+    where: { id: open.id },
+    data: {
+      clockOutAt,
+      hoursWorked: new Prisma.Decimal(Number(hours.toFixed(2))),
+      notes: notes || open.notes,
+    },
+  });
+  return serializeTimeEntry(entry);
 }

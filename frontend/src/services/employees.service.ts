@@ -1,4 +1,4 @@
-import type { Employee, EmployeeStats } from "@/types";
+import type { Employee, EmployeeStats, SalaryMonth, TimeEntriesResult, TimeEntry } from "@/types";
 import type { ListParams, Paginated } from "@/types/api";
 import { api } from "@/services/api";
 
@@ -20,6 +20,14 @@ export interface EmployeeInput {
   salary?: number | null;
   emergencyContact?: EmergencyContactInput | null;
   notes?: string | null;
+}
+
+export interface SalaryPaymentInput {
+  month: string;
+  amount?: number;
+  paymentDate?: string;
+  method?: string;
+  notes?: string;
 }
 
 export const employeesService = {
@@ -55,5 +63,30 @@ export const employeesService = {
 
   async remove(id: string): Promise<void> {
     await api.delete(`/employees/${id}`);
+  },
+
+  async getSalaryHistory(id: string): Promise<SalaryMonth[]> {
+    const { data } = await api.get<{ months: SalaryMonth[] }>(`/employees/${id}/salary-history`);
+    return data.months;
+  },
+
+  async recordSalaryPayment(id: string, input: SalaryPaymentInput): Promise<SalaryMonth> {
+    const { data } = await api.post<SalaryMonth>(`/employees/${id}/salary-payments`, input);
+    return data;
+  },
+
+  async getTimeEntries(id: string): Promise<TimeEntriesResult> {
+    const { data } = await api.get<TimeEntriesResult>(`/employees/${id}/time-entries`);
+    return data;
+  },
+
+  async clockIn(id: string): Promise<TimeEntry> {
+    const { data } = await api.post<TimeEntry>(`/employees/${id}/clock-in`, {});
+    return data;
+  },
+
+  async clockOut(id: string): Promise<TimeEntry> {
+    const { data } = await api.post<TimeEntry>(`/employees/${id}/clock-out`, {});
+    return data;
   },
 };

@@ -13,6 +13,22 @@ import { loginSchema, type LoginInput } from "@/utils/validation";
 
 const REMEMBER_KEY = "mf_remember_username";
 
+function greeting(): string {
+  const hour = new Date().getHours();
+  if (hour < 12) return "Good morning";
+  if (hour < 17) return "Good afternoon";
+  return "Good evening";
+}
+
+function todayLabel(): string {
+  return new Date().toLocaleDateString(undefined, {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+}
+
 export default function LoginPage() {
   const { login } = useAuth();
   const navigate = useNavigate();
@@ -71,10 +87,10 @@ export default function LoginPage() {
             Staff Portal
           </span>
           <h1 className="mt-4 font-display text-[26px] font-bold tracking-tight text-white">
-            Welcome back
+            {greeting()}
           </h1>
           <p className="mt-1.5 text-sm text-white/50">
-            Sign in to manage your car wash
+            {todayLabel()} · Sign in to manage your car wash
           </p>
         </div>
 

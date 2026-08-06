@@ -33,3 +33,15 @@ export const employeeQuerySchema = paginationQuerySchema.extend({
   sortBy: z.enum(["name", "position", "hireDate", "salary", "createdAt"]).optional(),
   sortDir: z.enum(["asc", "desc"]).optional(),
 });
+
+export const salaryPaymentSchema = z.object({
+  month: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/, "Month must be in YYYY-MM format"),
+  amount: z.coerce.number().min(0).optional(),
+  paymentDate: z.coerce.date().optional(),
+  method: z.enum(["CASH", "MOBILE_MONEY", "CARD", "BANK_TRANSFER"]).optional(),
+  notes: z.string().trim().max(300).optional().or(z.literal("")),
+});
+
+export const clockInOutSchema = z.object({
+  notes: z.string().trim().max(300).optional().or(z.literal("")),
+});

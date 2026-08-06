@@ -193,6 +193,8 @@ model Branch {
   inventoryMovements InventoryMovement[]
   expenses         Expense[]
   notifications    Notification[]
+  salaryPayments   SalaryPayment[]
+  timeEntries      TimeEntry[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -229,6 +231,7 @@ model User {
   inventoryMovements InventoryMovement[] @relation("InventoryMovements")
   createdExpenses  Expense[] @relation("CreatedExpenses")
   approvedExpenses Expense[] @relation("ApprovedExpenses")
+  salaryPayments   SalaryPayment[] @relation("SalaryPaymentsCreated")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -257,11 +260,55 @@ model Employee {
   washRecords WashRecord[]
   expenses     Expense[]
   bookings     Booking[]
+  salaryPayments SalaryPayment[]
+  timeEntries    TimeEntry[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([branchId])
   @@index([isActive])
+}
+
+// ---------------------------------------------------------------------
+// Payroll & time tracking
+// ---------------------------------------------------------------------
+
+model SalaryPayment {
+  id          String        @id @default(uuid()) @db.Uuid
+  employeeId  String        @db.Uuid
+  employee    Employee      @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  month       String        // e.g. "2026-07" — one payment per employee per month
+  amount      Decimal       @db.Decimal(12, 2)
+  paymentDate DateTime
+  method      PaymentMethod
+  notes       String?
+  createdById String?       @db.Uuid
+  createdBy   User?         @relation("SalaryPaymentsCreated", fields: [createdById], references: [id], onDelete: SetNull)
+  branchId    String?       @db.Uuid
+  branch      Branch?       @relation(fields: [branchId], references: [id])
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@unique([employeeId, month])
+  @@index([branchId])
+}
+
+model TimeEntry {
+  id          String   @id @default(uuid()) @db.Uuid
+  employeeId  String   @db.Uuid
+  employee    Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  clockInAt   DateTime @default(now())
+  clockOutAt  DateTime?
+  hoursWorked Decimal? @db.Decimal(10, 2) // computed on clock-out
+  notes       String?
+  branchId    String?  @db.Uuid
+  branch      Branch?  @relation(fields: [branchId], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([employeeId])
+  @@index([clockInAt])
+  @@index([branchId])
 }
 
 // ---------------------------------------------------------------------
