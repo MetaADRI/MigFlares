@@ -74,10 +74,10 @@ Deploy. Your API is at `https://<service>.onrender.com/api`.
    - Output directory: `dist`
    - Environment variable (Production): `VITE_API_URL=https://<service>.onrender.com/api`
    - `NODE_VERSION=22` if the build needs it
-3. SPA routing is handled by `frontend/public/_redirects` (already committed):
-   ```
-   /*  /index.html  200
-   ```
+3. SPA routing: Cloudflare Pages serves `_redirects` from `frontend/public` if
+   you add one (`/*  /index.html  200`). If you deploy via **Workers Assets**
+   instead, SPA fallback is handled by `not_found_handling: single-page-application`,
+   so do NOT add `_redirects` (Workers Assets rejects it as an infinite loop).
 4. Deploy. Your app is live at `https://<project>.pages.dev`.
 
 ---
