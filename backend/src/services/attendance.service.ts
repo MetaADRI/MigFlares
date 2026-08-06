@@ -4,9 +4,10 @@ import { ApiError } from "../utils/api-error.js";
 import { buildPageMeta, getPagination } from "../utils/pagination.js";
 
 /* ------------------------------------------------------------------ */
-/* Attendance — per-employee-per-day snapshots feeding payroll.         */
-/* Auto-created on first login of the day (source LOGIN) or via the    */
-/* clock buttons (source CLOCK_BUTTON), then finalized on End Shift.   */
+/* Attendance — per-employee-per-day snapshots feeding payroll.        */
+/* Records are created and corrected manually by staff (the door       */
+/* keeper marks who is present/late/absent/on leave); the system does  */
+/* NOT self-track attendance from logins or clock buttons.             */
 /* ------------------------------------------------------------------ */
 
 const startOfDayLocal = (d: Date): Date => {
@@ -16,14 +17,6 @@ const startOfDayLocal = (d: Date): Date => {
 };
 
 const round2 = (n: number): number => Math.round(n * 100) / 100;
-
-/** "08:00" -> minutes since local midnight. */
-const parseHm = (hm: string): number => {
-  const [h, m] = hm.split(":").map(Number);
-  return (h ?? 8) * 60 + (m ?? 0);
-};
-
-const minutesOf = (d: Date): number => d.getHours() * 60 + d.getMinutes();
 
 interface RuleDefaults {
   startTime: string;
@@ -90,122 +83,77 @@ function serialize(r: AttendanceRow) {
 
 export interface MarkAttendanceInput {
   employeeId: string;
-  branchId: string | null;
-  source: string;
-  clockInAt?: Date;
-  timeEntryId?: string;
+  /** YYYY-MM-DD in the branch's local day; defaults to today. */
+  date?: string;
+  status: AttendanceStatus;
+  clockInAt?: Date | null;
+  clockOutAt?: Date | null;
   notes?: string;
+  branchId?: string | null;
 }
 
 /**
- * Upsert today's attendance record. Keeps the earliest clock-in, honours an
- * existing time-entry link (a login snapshot can later be linked to a manual
- * clock button without breaking the unique timeEntryId constraint).
+ * Manually record attendance for an employee on a given day (create or
+ * replace). The door keeper picks the status explicitly — the system does
+ * not derive it. When both clock-in and clock-out are provided, hours and
+ * overtime are recomputed against the branch's payroll rule.
  */
-export async function markAttendance(input: MarkAttendanceInput) {
+export async function markAttendanceManual(input: MarkAttendanceInput, userId?: string) {
   const employee = await prisma.employee.findUnique({ where: { id: input.employeeId } });
   if (!employee) throw ApiError.notFound("Employee not found");
-  if (!employee.attendanceRequired) return null;
+  if (input.branchId && employee.branchId !== input.branchId) {
+    throw ApiError.forbidden("Employee does not belong to your branch");
+  }
 
-  const date = startOfDayLocal(new Date());
-  const clockInAt = input.clockInAt ?? new Date();
-  const rule = await getRule(input.branchId);
-  const late = minutesOf(clockInAt) > parseHm(rule.startTime) + rule.graceMinutes;
-  const status: AttendanceStatus = late ? "LATE" : "PRESENT";
+  const date = input.date
+    ? (() => {
+        const [y, m, d] = input.date.split("-").map(Number);
+        if (!y || !m || !d) throw ApiError.badRequest("date must be YYYY-MM-DD");
+        return new Date(y, m - 1, d);
+      })()
+    : startOfDayLocal(new Date());
+
+  if (input.clockInAt && input.clockOutAt && input.clockOutAt < input.clockInAt) {
+    throw ApiError.badRequest("Clock out must be after clock in");
+  }
+
+  const clockInAt = input.clockInAt ?? null;
+  const clockOutAt = input.clockOutAt ?? null;
+
+  let hoursWorked = new Prisma.Decimal(0);
+  let overtimeHours = new Prisma.Decimal(0);
+  let overtimeMinutes = 0;
+  if (clockInAt && clockOutAt) {
+    const rule = await getRule(employee.branchId);
+    const totalMin = Math.max(0, Math.round((clockOutAt.getTime() - clockInAt.getTime()) / 60_000));
+    const overtimeMin = Math.max(0, totalMin - rule.dailyOvertimeThresholdMin);
+    overtimeHours = new Prisma.Decimal(round2(overtimeMin / 60));
+    overtimeMinutes = overtimeMin;
+    hoursWorked = new Prisma.Decimal(round2((totalMin - overtimeMin) / 60));
+  }
+
+  const data = {
+    status: input.status,
+    clockInAt,
+    clockOutAt,
+    hoursWorked,
+    overtimeHours,
+    overtimeMinutes,
+    notes: input.notes ?? null,
+    source: "MANUAL" as const,
+    correctedById: userId ?? null,
+    correctedAt: new Date(),
+  };
 
   const existing = await prisma.attendanceRecord.findUnique({
-    where: { employeeId_date: { employeeId: input.employeeId, date } },
+    where: { employeeId_date: { employeeId: employee.id, date } },
   });
-
-  if (existing) {
-    const data: Prisma.AttendanceRecordUpdateInput = {};
-    const earlier = !existing.clockInAt || clockInAt.getTime() < existing.clockInAt.getTime();
-    if (earlier) {
-      data.clockInAt = clockInAt;
-      data.status = status;
-    }
-    if (existing.timeEntryId == null && input.timeEntryId) {
-      data.timeEntry = { connect: { id: input.timeEntryId } };
-    }
-    if (input.notes) data.notes = input.notes;
-    const updated = await prisma.attendanceRecord.update({ where: { id: existing.id }, data });
-    return serialize(updated);
-  }
-
-  const record = await prisma.attendanceRecord.create({
-    data: {
-      employeeId: input.employeeId,
-      branchId: input.branchId,
-      date,
-      status,
-      clockInAt,
-      hoursWorked: new Prisma.Decimal(0),
-      overtimeHours: new Prisma.Decimal(0),
-      overtimeMinutes: 0,
-      source: input.source,
-      timeEntryId: input.timeEntryId ?? null,
-      notes: input.notes,
-    },
-  });
+  const record = existing
+    ? await prisma.attendanceRecord.update({ where: { id: existing.id }, data })
+    : await prisma.attendanceRecord.create({
+        data: { employeeId: employee.id, branchId: employee.branchId, date, ...data },
+      });
   return serialize(record);
-}
-
-/** Best-effort auto-attendance on login — never throws into the login flow. */
-export async function recordLoginAttendance(
-  userId: string,
-  branchId: string | null,
-): Promise<void> {
-  try {
-    const employee = await prisma.employee.findUnique({ where: { userId } });
-    if (!employee || !employee.attendanceRequired) return;
-    await markAttendance({ employeeId: employee.id, branchId, source: "LOGIN" });
-  } catch {
-    /* attendance is best-effort */
-  }
-}
-
-export interface FinalizeAttendanceInput {
-  employeeId: string;
-  branchId: string | null;
-  timeEntryId?: string;
-  clockOutAt?: Date;
-}
-
-/**
- * End-of-shift recompute: regular hours capped at the overtime threshold,
- * anything beyond becomes overtime. Linked via the TimeEntry when available,
- * otherwise falls back to today's record for the employee.
- */
-export async function finalizeAttendance(input: FinalizeAttendanceInput) {
-  const date = startOfDayLocal(new Date());
-  const linked = input.timeEntryId
-    ? await prisma.attendanceRecord.findFirst({
-        where: { employeeId: input.employeeId, timeEntryId: input.timeEntryId },
-      })
-    : null;
-  const target =
-    linked ??
-    (await prisma.attendanceRecord.findFirst({ where: { employeeId: input.employeeId, date } }));
-  if (!target) return null;
-
-  const clockOutAt = input.clockOutAt ?? new Date();
-  const clockInAt = target.clockInAt ?? clockOutAt;
-  const rule = await getRule(input.branchId);
-  const totalMin = Math.max(0, Math.round((clockOutAt.getTime() - clockInAt.getTime()) / 60_000));
-  const overtimeMin = Math.max(0, totalMin - rule.dailyOvertimeThresholdMin);
-  const regularMin = totalMin - overtimeMin;
-
-  const updated = await prisma.attendanceRecord.update({
-    where: { id: target.id },
-    data: {
-      clockOutAt,
-      hoursWorked: new Prisma.Decimal(round2(regularMin / 60)),
-      overtimeHours: new Prisma.Decimal(round2(overtimeMin / 60)),
-      overtimeMinutes: overtimeMin,
-      ...(target.timeEntryId == null && input.timeEntryId ? { timeEntryId: input.timeEntryId } : {}),
-    },
-  });
-  return serialize(updated);
 }
 
 export interface AttendanceListQuery {
@@ -262,17 +210,16 @@ export async function getMyAttendance(employeeId: string, query: AttendanceListQ
   return listAttendance({ ...query, employeeId }, null);
 }
 
-/** Today's headcount snapshot by status + staff currently clocked in.
+/** Today's headcount snapshot by status.
  *  Present/late come from today's records; on-leave is derived from APPROVED
  *  leave covering today plus any ON_LEAVE records; absent is everyone else
- *  on the active roster — so the tabs stay live as people clock in. */
+ *  on the active roster. Only staff-managed records are reflected here. */
 export async function getTodaySummary(branchId: string | null) {
   const date = startOfDayLocal(new Date());
   const tomorrow = new Date(date.getTime() + 86_400_000);
   const scope = branchId ? { branchId } : {};
-  const [records, clockedIn, active, approvedLeave] = await Promise.all([
+  const [records, active, approvedLeave] = await Promise.all([
     prisma.attendanceRecord.findMany({ where: { date, ...scope }, select: { employeeId: true, status: true } }),
-    prisma.timeEntry.count({ where: { clockOutAt: null, ...scope } }),
     prisma.employee.findMany({
       where: { isActive: true, attendanceRequired: true, ...scope },
       select: { id: true },
@@ -310,7 +257,6 @@ export async function getTodaySummary(branchId: string | null) {
     onLeave,
     holiday,
     total: present + late + absent + onLeave + holiday,
-    clockedInNow: clockedIn,
   };
 }
 

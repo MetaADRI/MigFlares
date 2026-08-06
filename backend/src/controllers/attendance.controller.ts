@@ -1,5 +1,5 @@
 import type { Request, Response } from "express";
-import { ok } from "../utils/api-response.js";
+import { created, ok } from "../utils/api-response.js";
 import { asyncHandler } from "../utils/async-handler.js";
 import * as attendanceService from "../services/attendance.service.js";
 
@@ -9,6 +9,14 @@ export const list = asyncHandler(async (req: Request, res: Response) => {
     req.user?.branchId ?? null,
   );
   res.json(ok(result));
+});
+
+export const mark = asyncHandler(async (req: Request, res: Response) => {
+  const record = await attendanceService.markAttendanceManual(
+    { ...req.body, branchId: req.user?.branchId ?? null },
+    req.user?.sub,
+  );
+  res.status(201).json(created(record, "Attendance marked"));
 });
 
 export const today = asyncHandler(async (req: Request, res: Response) => {

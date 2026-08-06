@@ -3,8 +3,8 @@ import { Link } from "react-router-dom";
 import {
   CalendarCheck,
   CalendarClock,
+  CalendarOff,
   CircleX,
-  Clock3,
   HandCoins,
   Inbox,
   UserCheck,
@@ -16,7 +16,7 @@ import { StatusBadge } from "@/components/common/status-badge";
 import { dashboardService } from "@/services/dashboard.service";
 import { PAYROLL_RUN_STATUS_META } from "@/constants";
 import type { StaffSnapshot } from "@/types";
-import { formatCurrency, formatTime } from "@/utils/format";
+import { formatCurrency } from "@/utils/format";
 
 function PanelSkeleton() {
   return (
@@ -32,7 +32,7 @@ function PanelSkeleton() {
   );
 }
 
-/** Dashboard panel — today's attendance, pending leave, payday and who's clocked in. */
+/** Dashboard panel — today's attendance, pending leave, payday and the current run. */
 export function StaffSnapshotPanel() {
   const [snapshot, setSnapshot] = useState<StaffSnapshot | null>(null);
   const [error, setError] = useState(false);
@@ -55,7 +55,7 @@ export function StaffSnapshotPanel() {
     { label: "Present", value: att.present, icon: UserCheck, accent: "bg-emerald-50 text-emerald-600" },
     { label: "Late", value: att.late, icon: CalendarClock, accent: "bg-amber-50 text-amber-600" },
     { label: "Absent", value: att.absent, icon: CircleX, accent: "bg-red-50 text-red-600" },
-    { label: "Clocked in", value: att.clockedInNow, icon: Clock3, accent: "bg-sky-50 text-sky-600" },
+    { label: "On leave", value: att.onLeave, icon: CalendarOff, accent: "bg-violet-50 text-violet-600" },
   ];
 
   return (
@@ -121,25 +121,6 @@ export function StaffSnapshotPanel() {
         <p className="mt-3 rounded-xl border border-orange-200 bg-orange-50 px-3.5 py-2 text-xs text-orange-800">
           {snapshot.payday.message}
         </p>
-      ) : null}
-
-      {snapshot.clockedIn.length > 0 ? (
-        <div className="mt-4">
-          <p className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-            Clocked in now
-          </p>
-          <ul className="mt-2 space-y-1.5">
-            {snapshot.clockedIn.slice(0, 5).map((e) => (
-              <li key={e.id} className="flex items-center justify-between rounded-lg bg-muted/40 px-3 py-1.5 text-xs">
-                <span className="truncate font-medium text-foreground">
-                  {e.firstName} {e.lastName}
-                  <span className="ml-1.5 font-normal text-muted-foreground">{e.position}</span>
-                </span>
-                <span className="shrink-0 text-muted-foreground">since {formatTime(e.clockInAt)}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
       ) : null}
     </div>
   );

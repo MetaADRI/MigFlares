@@ -34,8 +34,8 @@ import {
 } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { employeesService } from "@/services/employees.service";
-import type { Employee, EmployeeStats, SalaryMonth, TimeEntriesResult } from "@/types";
-import { formatCurrency, formatDate, formatTime } from "@/utils/format";
+import type { Employee, EmployeeStats, SalaryMonth } from "@/types";
+import { formatCurrency, formatDate } from "@/utils/format";
 
 interface EmployeeProfileDrawerProps {
   open: boolean;
@@ -68,7 +68,7 @@ function errorMessage(err: unknown, fallback: string): string {
   return response?.data?.message ?? (err instanceof Error ? err.message : fallback);
 }
 
-/** Employee profile drawer with performance, payroll and time-clock dashboards. */
+/** Employee profile drawer with performance and payroll dashboards. */
 export function EmployeeProfileDrawer({ open, onOpenChange, employee, onEdit }: EmployeeProfileDrawerProps) {
   const [stats, setStats] = useState<EmployeeStats | null>(null);
   const [loading, setLoading] = useState(false);
@@ -79,10 +79,6 @@ export function EmployeeProfileDrawer({ open, onOpenChange, employee, onEdit }: 
   const [recordAmount, setRecordAmount] = useState("");
   const [recordMethod, setRecordMethod] = useState("CASH");
   const [recordBusy, setRecordBusy] = useState(false);
-
-  const [timeData, setTimeData] = useState<TimeEntriesResult | null>(null);
-  const [timeLoading, setTimeLoading] = useState(false);
-  const [clockBusy, setClockBusy] = useState(false);
 
   useEffect(() => {
     if (!open || !employee) return;
@@ -126,25 +122,6 @@ export function EmployeeProfileDrawer({ open, onOpenChange, employee, onEdit }: 
     };
   }, [open, employee]);
 
-  useEffect(() => {
-    if (!open || !employee) return;
-    let cancelled = false;
-    setTimeLoading(true);
-    setTimeData(null);
-    employeesService
-      .getTimeEntries(employee.id)
-      .then((t) => {
-        if (!cancelled) setTimeData(t);
-      })
-      .catch(() => undefined)
-      .finally(() => {
-        if (!cancelled) setTimeLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [open, employee]);
-
   const handleRecordSalary = async () => {
     if (!employee || !recordMonth) return;
     setRecordBusy(true);
@@ -164,34 +141,6 @@ export function EmployeeProfileDrawer({ open, onOpenChange, employee, onEdit }: 
       toast.error(errorMessage(err, "Failed to record payment"));
     } finally {
       setRecordBusy(false);
-    }
-  };
-
-  const handleClockIn = async () => {
-    if (!employee) return;
-    setClockBusy(true);
-    try {
-      const entry = await employeesService.clockIn(employee.id);
-      setTimeData((t) => ({ current: entry, entries: t?.entries ?? [] }));
-      toast.success("Clocked in");
-    } catch (err) {
-      toast.error(errorMessage(err, "Failed to clock in"));
-    } finally {
-      setClockBusy(false);
-    }
-  };
-
-  const handleClockOut = async () => {
-    if (!employee) return;
-    setClockBusy(true);
-    try {
-      const entry = await employeesService.clockOut(employee.id);
-      setTimeData((t) => ({ current: null, entries: [entry, ...(t?.entries ?? [])] }));
-      toast.success("Clocked out");
-    } catch (err) {
-      toast.error(errorMessage(err, "Failed to clock out"));
-    } finally {
-      setClockBusy(false);
     }
   };
 
@@ -366,77 +315,6 @@ export function EmployeeProfileDrawer({ open, onOpenChange, employee, onEdit }: 
                       </div>
                     ))}
                   </div>
-                </div>
-              ) : null}
-            </div>
-
-            {/* Time clock */}
-            <div className="mt-5">
-              <div className="mb-2.5 flex items-center justify-between">
-                <h4 className="text-sm font-semibold text-foreground">Time clock</h4>
-                <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Shifts</span>
-              </div>
-              {timeLoading ? (
-                <Skeleton className="h-32 w-full" />
-              ) : timeData ? (
-                <div className="space-y-2.5">
-                  <div className="flex items-center justify-between gap-2 rounded-xl border border-border/60 bg-background/60 px-3.5 py-3">
-                    <div className="flex items-center gap-2.5">
-                      <span className="relative flex size-2.5">
-                        <span
-                          className={`absolute inline-flex h-full w-full animate-ping rounded-full opacity-75 ${
-                            timeData.current ? "bg-emerald-400" : "bg-zinc-300"
-                          }`}
-                        />
-                        <span
-                          className={`relative inline-flex size-2.5 rounded-full ${
-                            timeData.current ? "bg-emerald-500" : "bg-zinc-400"
-                          }`}
-                        />
-                      </span>
-                      <div>
-                        <p className="text-sm font-semibold text-foreground">
-                          {timeData.current ? "Clocked in" : "Not clocked in"}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {timeData.current ? `Since ${formatTime(timeData.current.clockInAt)}` : "Start your shift"}
-                        </p>
-                      </div>
-                    </div>
-                    <Button
-                      size="sm"
-                      variant={timeData.current ? "outline" : "default"}
-                      loading={clockBusy}
-                      onClick={() => void (timeData.current ? handleClockOut() : handleClockIn())}
-                    >
-                      {timeData.current ? "Clock out" : "Clock in"}
-                    </Button>
-                  </div>
-
-                  {timeData.entries.length > 0 ? (
-                    <div className="overflow-hidden rounded-xl border border-border/60">
-                      {timeData.entries.slice(0, 5).map((e, i) => (
-                        <div
-                          key={e.id}
-                          className={`flex items-center justify-between px-3.5 py-2.5 text-sm ${
-                            i > 0 ? "border-t border-border/50" : ""
-                          }`}
-                        >
-                          <div>
-                            <p className="font-medium text-foreground">{formatDate(e.clockInAt)}</p>
-                            <p className="text-xs text-muted-foreground">
-                              {formatTime(e.clockInAt)} → {e.clockOutAt ? formatTime(e.clockOutAt) : "—"}
-                            </p>
-                          </div>
-                          <span className="text-xs font-semibold text-foreground">
-                            {e.hoursWorked != null ? `${e.hoursWorked}h` : "—"}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-xs text-muted-foreground">No shifts recorded yet.</p>
-                  )}
                 </div>
               ) : null}
             </div>

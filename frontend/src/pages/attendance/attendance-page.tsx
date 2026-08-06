@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { CalendarCheck, CalendarClock, CircleX, PencilLine, UserCheck } from "lucide-react";
+import { CalendarCheck, CalendarClock, CircleX, PencilLine, Plus, UserCheck } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -39,15 +39,27 @@ import { LoadingState } from "@/components/common/loading-state";
 import { useDebounce } from "@/hooks/use-debounce";
 import { usePermission } from "@/context/permission-context";
 import { attendanceService } from "@/services/attendance.service";
+import { employeesService } from "@/services/employees.service";
 import { ATTENDANCE_MONTHS, ATTENDANCE_STATUS_META } from "@/constants";
 import type { Paginated } from "@/types/api";
-import type { AttendanceRecord, AttendanceStatus, AttendanceTodaySummary } from "@/types";
+import type { AttendanceRecord, AttendanceStatus, AttendanceTodaySummary, Employee } from "@/types";
 import { formatDate, formatTime } from "@/utils/format";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { attendanceCorrectionSchema, type AttendanceCorrectionInput } from "@/utils/validation";
+import {
+  attendanceCorrectionSchema,
+  markAttendanceSchema,
+  type AttendanceCorrectionInput,
+  type MarkAttendanceInput,
+} from "@/utils/validation";
 
 const PAGE_SIZE = 10;
+
+function toLocalDateInput(): string {
+  const d = new Date();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
 
 function toLocalInput(iso: string | null | undefined): string {
   if (!iso) return "";
@@ -79,6 +91,7 @@ export default function AttendancePage() {
   const [refreshKey, setRefreshKey] = useState(0);
 
   const [correcting, setCorrecting] = useState<AttendanceRecord | null>(null);
+  const [marking, setMarking] = useState(false);
 
   const load = useCallback(() => {
     let cancelled = false;
@@ -134,8 +147,14 @@ export default function AttendancePage() {
     <div className="space-y-6">
       <PageHeader
         title="Attendance"
-        description="Daily clock-in board, corrections and shift history."
-      />
+        description="Daily records marked by staff — the door keeper records who is present, late, absent or on leave."
+      >
+        {canManage ? (
+          <Button onClick={() => setMarking(true)}>
+            <Plus /> Mark attendance
+          </Button>
+        ) : null}
+      </PageHeader>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {summaryCards.map((c, i) => (
@@ -187,7 +206,7 @@ export default function AttendancePage() {
           <EmptyState
             icon={CalendarCheck}
             title="No attendance records"
-            description="Shift clock-ins and manual records will show up here."
+            description="Mark attendance to start building the daily register."
           />
         ) : (
           <>
@@ -254,6 +273,15 @@ export default function AttendancePage() {
         }}
         onSaved={() => {
           setCorrecting(null);
+          setRefreshKey((k) => k + 1);
+        }}
+      />
+
+      <MarkDialog
+        open={marking}
+        onOpenChange={setMarking}
+        onSaved={() => {
+          setMarking(false);
           setRefreshKey((k) => k + 1);
         }}
       />
@@ -358,6 +386,150 @@ function CorrectDialog({
             </Button>
             <Button type="submit" loading={submitting}>
               Save correction
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function MarkDialog({
+  open,
+  onOpenChange,
+  onSaved,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSaved: () => void;
+}) {
+  const [employees, setEmployees] = useState<Employee[]>([]);
+  const [loadingEmployees, setLoadingEmployees] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+
+  const {
+    register,
+    handleSubmit,
+    reset,
+    setValue,
+    watch,
+    formState: { errors },
+  } = useForm<MarkAttendanceInput>({
+    resolver: zodResolver(markAttendanceSchema),
+    defaultValues: { employeeId: "", date: toLocalDateInput(), status: "PRESENT", clockInAt: "", clockOutAt: "", notes: "" },
+  });
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    reset({ employeeId: "", date: toLocalDateInput(), status: "PRESENT", clockInAt: "", clockOutAt: "", notes: "" });
+    setLoadingEmployees(true);
+    setEmployees([]);
+    employeesService
+      .list({ page: 1, pageSize: 100, status: "active" })
+      .then((res) => {
+        if (!cancelled) setEmployees(res.data);
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        if (!cancelled) setLoadingEmployees(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, reset]);
+
+  const onSubmit = async (values: MarkAttendanceInput) => {
+    setSubmitting(true);
+    try {
+      await attendanceService.mark({
+        employeeId: values.employeeId,
+        date: values.date,
+        status: values.status,
+        clockInAt: toIso(values.clockInAt ?? "") ?? null,
+        clockOutAt: toIso(values.clockOutAt ?? "") ?? null,
+        notes: values.notes || undefined,
+      });
+      toast.success("Attendance marked");
+      onSaved();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to mark attendance");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Mark attendance</DialogTitle>
+          <DialogDescription>
+            Record who is present, late, absent or on leave for the chosen day.
+          </DialogDescription>
+        </DialogHeader>
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
+          <div className="space-y-1.5">
+            <Label>Employee</Label>
+            <select
+              value={watch("employeeId")}
+              onChange={(e) => setValue("employeeId", e.target.value)}
+              className="flex h-10 w-full rounded-xl border border-border/70 bg-background px-3 text-sm shadow-sm outline-none transition-colors focus:border-primary/60 focus:ring-2 focus:ring-primary/20"
+            >
+              <option value="">{loadingEmployees ? "Loading employees…" : "Select employee"}</option>
+              {employees.map((e) => (
+                <option key={e.id} value={e.id}>
+                  {e.name} — {e.position}
+                </option>
+              ))}
+            </select>
+            {errors.employeeId?.message ? <p className="text-xs text-red-500">{errors.employeeId.message}</p> : null}
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label>Date</Label>
+              <Input type="date" {...register("date")} />
+              {errors.date?.message ? <p className="text-xs text-red-500">{errors.date.message}</p> : null}
+            </div>
+            <div className="space-y-1.5">
+              <Label>Status</Label>
+              <select
+                value={watch("status")}
+                onChange={(e) => setValue("status", e.target.value as AttendanceStatus)}
+                className="flex h-10 w-full rounded-xl border border-border/70 bg-background px-3 text-sm shadow-sm outline-none transition-colors focus:border-primary/60 focus:ring-2 focus:ring-primary/20"
+              >
+                {Object.entries(ATTENDANCE_STATUS_META).map(([value, meta]) => (
+                  <option key={value} value={value}>
+                    {meta.label}
+                  </option>
+                ))}
+              </select>
+              {errors.status?.message ? <p className="text-xs text-red-500">{errors.status.message}</p> : null}
+            </div>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label>Clock in</Label>
+              <Input type="datetime-local" {...register("clockInAt")} />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Clock out</Label>
+              <Input type="datetime-local" {...register("clockOutAt")} />
+            </div>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Hours and overtime are only computed when both clock-in and clock-out are filled in.
+          </p>
+          <div className="space-y-1.5">
+            <Label>Notes</Label>
+            <Textarea placeholder="Optional note" rows={2} {...register("notes")} />
+          </div>
+          <DialogFooter className="pt-2">
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={submitting}>
+              Cancel
+            </Button>
+            <Button type="submit" loading={submitting}>
+              Mark attendance
             </Button>
           </DialogFooter>
         </form>

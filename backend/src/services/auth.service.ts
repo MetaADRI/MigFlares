@@ -4,7 +4,6 @@ import { prisma } from "../config/database.js";
 import { env } from "../config/env.js";
 import { ApiError } from "../utils/api-error.js";
 import { signAccessToken, signRefreshToken, verifyRefreshToken } from "../utils/token.js";
-import { recordLoginAttendance } from "./attendance.service.js";
 
 type UserWithRole = Prisma.UserGetPayload<{ include: { role: true } }>;
 
@@ -100,7 +99,6 @@ export async function login(username: string, password: string) {
     where: { id: user.id },
     data: { refreshToken, lastLoginAt: new Date() },
   });
-  await recordLoginAttendance(user.id, user.branchId);
   return {
     user: toPublicUser(user),
     accessToken: signAccessToken(issuePayload(user)),

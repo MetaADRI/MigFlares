@@ -2,7 +2,6 @@ import { Prisma, PaymentMethod, EmploymentType } from "@prisma/client";
 import { prisma } from "../config/database.js";
 import { ApiError } from "../utils/api-error.js";
 import { buildPageMeta, getPagination } from "../utils/pagination.js";
-import * as attendanceService from "./attendance.service.js";
 
 export interface EmployeeListQuery {
   page?: number;
@@ -373,95 +372,4 @@ export async function recordSalaryPayment(
     paymentDate: payment.paymentDate.toISOString(),
     method: payment.method,
   };
-}
-
-// ---------------------------------------------------------------------
-// Time clock — clock in/out & shift history
-// ---------------------------------------------------------------------
-
-interface TimeEntryRow {
-  id: string;
-  clockInAt: Date;
-  clockOutAt: Date | null;
-  hoursWorked: Prisma.Decimal | null;
-  notes: string | null;
-}
-
-function serializeTimeEntry(e: TimeEntryRow) {
-  return {
-    id: e.id,
-    clockInAt: e.clockInAt.toISOString(),
-    clockOutAt: e.clockOutAt ? e.clockOutAt.toISOString() : null,
-    hoursWorked: e.hoursWorked ? Number(e.hoursWorked) : null,
-    notes: e.notes,
-  };
-}
-
-export async function getTimeEntries(id: string) {
-  const employee = await prisma.employee.findUnique({ where: { id } });
-  if (!employee) throw ApiError.notFound("Employee not found");
-
-  const current = await prisma.timeEntry.findFirst({
-    where: { employeeId: id, clockOutAt: null },
-    orderBy: { clockInAt: "desc" },
-  });
-  const entries = await prisma.timeEntry.findMany({
-    where: { employeeId: id },
-    orderBy: { clockInAt: "desc" },
-    take: 20,
-  });
-
-  return {
-    current: current ? serializeTimeEntry(current) : null,
-    entries: entries.map(serializeTimeEntry),
-  };
-}
-
-export async function clockIn(id: string, branchId: string | null) {
-  const employee = await prisma.employee.findUnique({ where: { id } });
-  if (!employee) throw ApiError.notFound("Employee not found");
-
-  const open = await prisma.timeEntry.findFirst({ where: { employeeId: id, clockOutAt: null } });
-  if (open) throw ApiError.conflict("Employee is already clocked in");
-
-  const entry = await prisma.timeEntry.create({
-    data: { employeeId: id, clockInAt: new Date(), branchId },
-  });
-  await attendanceService.markAttendance({
-    employeeId: id,
-    branchId,
-    source: "CLOCK_BUTTON",
-    timeEntryId: entry.id,
-  });
-  return serializeTimeEntry(entry);
-}
-
-export async function clockOut(id: string, notes?: string) {
-  const employee = await prisma.employee.findUnique({ where: { id } });
-  if (!employee) throw ApiError.notFound("Employee not found");
-
-  const open = await prisma.timeEntry.findFirst({
-    where: { employeeId: id, clockOutAt: null },
-    orderBy: { clockInAt: "desc" },
-  });
-  if (!open) throw ApiError.badRequest("Employee is not clocked in");
-
-  const clockOutAt = new Date();
-  const hours = Math.max(0, (clockOutAt.getTime() - open.clockInAt.getTime()) / 3_600_000);
-
-  const entry = await prisma.timeEntry.update({
-    where: { id: open.id },
-    data: {
-      clockOutAt,
-      hoursWorked: new Prisma.Decimal(Number(hours.toFixed(2))),
-      notes: notes || open.notes,
-    },
-  });
-  await attendanceService.finalizeAttendance({
-    employeeId: id,
-    branchId: open.branchId ?? null,
-    timeEntryId: open.id,
-    clockOutAt,
-  });
-  return serializeTimeEntry(entry);
 }

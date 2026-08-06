@@ -4,7 +4,11 @@ import { requireAuth } from "../middleware/auth.middleware.js";
 import { requirePermission } from "../middleware/permission.middleware.js";
 import { validate } from "../middleware/validate.middleware.js";
 import { idParamsSchema } from "../validation/common.validation.js";
-import { attendanceCorrectionSchema, attendanceQuerySchema } from "../validation/attendance.validation.js";
+import {
+  attendanceCorrectionSchema,
+  attendanceMarkSchema,
+  attendanceQuerySchema,
+} from "../validation/attendance.validation.js";
 
 const router = Router();
 
@@ -12,6 +16,12 @@ router.use(requireAuth);
 
 router.get("/", requirePermission("attendance:view"), validate(attendanceQuerySchema, "query"), attendanceController.list);
 router.get("/today", requirePermission("attendance:view"), attendanceController.today);
+router.post(
+  "/",
+  requirePermission("attendance:manage"),
+  validate(attendanceMarkSchema),
+  attendanceController.mark,
+);
 router.patch(
   "/:id",
   requirePermission("attendance:manage"),

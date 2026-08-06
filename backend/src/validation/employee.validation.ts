@@ -46,7 +46,3 @@ export const salaryPaymentSchema = z.object({
   method: z.enum(["CASH", "MOBILE_MONEY", "CARD", "BANK_TRANSFER"]).optional(),
   notes: z.string().trim().max(300).optional().or(z.literal("")),
 });
-
-export const clockInOutSchema = z.object({
-  notes: z.string().trim().max(300).optional().or(z.literal("")),
-});

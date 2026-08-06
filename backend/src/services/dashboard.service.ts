@@ -300,19 +300,13 @@ export async function getStaffSnapshot(branchId: string | null) {
   const now = new Date();
   const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 
-  const [attendance, pendingLeave, payday, currentRun, clockedIn] = await Promise.all([
+  const [attendance, pendingLeave, payday, currentRun] = await Promise.all([
     getTodaySummary(branchId),
     getPendingLeaveCount(branchId),
     paydayReminders(branchId),
     prisma.payrollRun.findFirst({
       where: { branchId, periodMonth: monthKey },
       include: { _count: { select: { payslips: true } } },
-    }),
-    prisma.timeEntry.findMany({
-      where: { clockOutAt: null, ...(branchId ? { branchId } : {}) },
-      include: { employee: { select: { id: true, firstName: true, lastName: true, position: true } } },
-      orderBy: { clockInAt: "asc" },
-      take: 12,
     }),
   ]);
 
@@ -330,12 +324,5 @@ export async function getStaffSnapshot(branchId: string | null) {
           totalNet: Number(currentRun.totalNet),
         }
       : null,
-    clockedIn: clockedIn.map((e) => ({
-      id: e.employee.id,
-      firstName: e.employee.firstName,
-      lastName: e.employee.lastName,
-      position: e.employee.position,
-      clockInAt: e.clockInAt.toISOString(),
-    })),
   };
 }

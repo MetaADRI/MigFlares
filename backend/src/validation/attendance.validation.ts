@@ -15,3 +15,12 @@ export const attendanceCorrectionSchema = z.object({
   clockOutAt: z.coerce.date().optional().nullable(),
   notes: z.string().trim().max(300).optional().or(z.literal("")),
 });
+
+export const attendanceMarkSchema = z.object({
+  employeeId: z.string().uuid("Invalid employee id"),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "date must be YYYY-MM-DD").optional(),
+  status: z.enum(["PRESENT", "ABSENT", "LATE", "ON_LEAVE", "HOLIDAY"]),
+  clockInAt: z.coerce.date().optional().nullable(),
+  clockOutAt: z.coerce.date().optional().nullable(),
+  notes: z.string().trim().max(300).optional().or(z.literal("")),
+});

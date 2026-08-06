@@ -186,6 +186,19 @@ export const attendanceCorrectionSchema = z.object({
 });
 export type AttendanceCorrectionInput = z.infer<typeof attendanceCorrectionSchema>;
 
+export const markAttendanceSchema = z.object({
+  employeeId: z.string().uuid("Select an employee"),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid date"),
+  status: z.enum(["PRESENT", "LATE", "ABSENT", "ON_LEAVE", "HOLIDAY"] as [
+    AttendanceStatus,
+    ...AttendanceStatus[],
+  ]),
+  clockInAt: z.string().optional().nullable(),
+  clockOutAt: z.string().optional().nullable(),
+  notes: z.string().trim().max(300, "Too long").or(z.literal("")),
+});
+export type MarkAttendanceInput = z.infer<typeof markAttendanceSchema>;
+
 export const leaveRequestSchema = z.object({
   type: z.enum(LEAVE_TYPES.map((t) => t.value) as [LeaveType, ...LeaveType[]]),
   startDate: z.string().min(1, "Start date is required"),

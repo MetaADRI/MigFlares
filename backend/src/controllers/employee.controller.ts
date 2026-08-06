@@ -62,21 +62,6 @@ export const recordSalary = asyncHandler(async (req: Request, res: Response) => 
   res.status(201).json(created(payment, "Salary payment recorded"));
 });
 
-export const timeEntries = asyncHandler(async (req: Request, res: Response) => {
-  const result = await employeeService.getTimeEntries(String(req.params.id));
-  res.json(ok(result));
-});
-
-export const clockIn = asyncHandler(async (req: Request, res: Response) => {
-  const entry = await employeeService.clockIn(String(req.params.id), req.user?.branchId ?? null);
-  res.status(201).json(created(entry, "Clocked in"));
-});
-
-export const clockOut = asyncHandler(async (req: Request, res: Response) => {
-  const entry = await employeeService.clockOut(String(req.params.id), String(req.body.notes ?? ""));
-  res.json(ok(entry, "Clocked out"));
-});
-
 /* ------------------------------------------------------------------ */
 /* Self-service (/employees/me/*) — resolved from the logged-in user.  */
 /* ------------------------------------------------------------------ */

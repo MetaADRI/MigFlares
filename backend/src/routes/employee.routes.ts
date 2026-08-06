@@ -8,7 +8,6 @@ import { attendanceQuerySchema } from "../validation/attendance.validation.js";
 import { leaveCreateSchema, leaveIdParamsSchema, leaveQuerySchema } from "../validation/leave.validation.js";
 import { payslipQuerySchema } from "../validation/payroll.validation.js";
 import {
-  clockInOutSchema,
   employeeCreateSchema,
   employeeQuerySchema,
   employeeSuspendSchema,
@@ -44,9 +43,6 @@ router.post(
   validate(salaryPaymentSchema),
   employeeController.recordSalary,
 );
-router.get("/:id/time-entries", requirePermission("employees:view"), validate(idParamsSchema, "params"), employeeController.timeEntries);
-router.post("/:id/clock-in", requirePermission("employees:manage"), validate(idParamsSchema, "params"), validate(clockInOutSchema), employeeController.clockIn);
-router.post("/:id/clock-out", requirePermission("employees:manage"), validate(idParamsSchema, "params"), validate(clockInOutSchema), employeeController.clockOut);
 router.get("/:id", requirePermission("employees:view"), validate(idParamsSchema, "params"), employeeController.get);
 router.patch("/:id", requirePermission("employees:manage"), validate(idParamsSchema, "params"), validate(employeeUpdateSchema), employeeController.update);
 router.patch("/:id/suspend", requirePermission("employees:manage"), validate(idParamsSchema, "params"), validate(employeeSuspendSchema), employeeController.suspend);

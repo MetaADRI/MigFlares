@@ -1,4 +1,4 @@
-import type { Employee, EmployeeStats, SalaryMonth, TimeEntriesResult, TimeEntry } from "@/types";
+import type { Employee, EmployeeStats, SalaryMonth } from "@/types";
 import type { ListParams, Paginated } from "@/types/api";
 import { api } from "@/services/api";
 
@@ -77,21 +77,6 @@ export const employeesService = {
 
   async recordSalaryPayment(id: string, input: SalaryPaymentInput): Promise<SalaryMonth> {
     const { data } = await api.post<SalaryMonth>(`/employees/${id}/salary-payments`, input);
-    return data;
-  },
-
-  async getTimeEntries(id: string): Promise<TimeEntriesResult> {
-    const { data } = await api.get<TimeEntriesResult>(`/employees/${id}/time-entries`);
-    return data;
-  },
-
-  async clockIn(id: string): Promise<TimeEntry> {
-    const { data } = await api.post<TimeEntry>(`/employees/${id}/clock-in`, {});
-    return data;
-  },
-
-  async clockOut(id: string): Promise<TimeEntry> {
-    const { data } = await api.post<TimeEntry>(`/employees/${id}/clock-out`, {});
     return data;
   },
 };

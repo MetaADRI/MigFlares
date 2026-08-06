@@ -282,19 +282,6 @@ export interface SalaryMonth {
   method: string | null;
 }
 
-export interface TimeEntry {
-  id: string;
-  clockInAt: string;
-  clockOutAt: string | null;
-  hoursWorked: number | null;
-  notes: string | null;
-}
-
-export interface TimeEntriesResult {
-  current: TimeEntry | null;
-  entries: TimeEntry[];
-}
-
 /* ------------------------ Attendance / Leave / Payroll ------------------------ */
 
 export interface AttendanceRecord {
@@ -320,7 +307,6 @@ export interface AttendanceTodaySummary {
   onLeave: number;
   holiday: number;
   total: number;
-  clockedInNow: number;
 }
 
 export interface LeaveRequest {
@@ -440,13 +426,6 @@ export interface StaffSnapshot {
     employeeCount: number;
     totalNet: number;
   } | null;
-  clockedIn: {
-    id: string;
-    firstName: string;
-    lastName: string;
-    position: string;
-    clockInAt: string;
-  }[];
 }
 
 export interface InventoryItem {
