@@ -24,10 +24,15 @@ git push -u origin main
 ## 1. Database — Neon
 
 1. Create a project at [neon.tech](https://neon.tech).
-2. Copy the pooled connection string (`?sslmode=require`).
+2. Copy two connection strings from the dashboard:
+   - **Pooled** (host contains `-pooler`) → used by the app as `DATABASE_URL`.
+   - **Direct** (non-pooler host) → used by migrations as `DIRECT_URL`.
+   Neon's pooler cannot take the advisory locks that `prisma migrate` needs, so
+   migrations must run against the direct connection.
 3. Apply migrations from your machine:
    ```bash
    cd backend
+   # with DIRECT_URL (direct host) exported in the environment
    npx prisma migrate deploy
    npm run db:seed   # once, against production DB
    ```
@@ -44,6 +49,7 @@ In Render → New → Blueprint, connect the repo. Render reads `render.yaml`
 `sync: false` env vars in the service dashboard:
 ```
 DATABASE_URL=<neon pooled url>
+DIRECT_URL=<neon direct (unpooled) url>
 JWT_ACCESS_SECRET=<long random>
 JWT_REFRESH_SECRET=<long random>
 CORS_ORIGIN=https://<your-project>.pages.dev
@@ -51,6 +57,10 @@ CLOUDINARY_CLOUD_NAME=...
 CLOUDINARY_API_KEY=...
 CLOUDINARY_API_SECRET=...
 ```
+
+> **Note:** `DIRECT_URL` is required. The start command runs `prisma migrate deploy`,
+> which needs the non-pooled connection to acquire database locks. Without it the
+> deploy fails with `P1002: timed out acquiring a postgres advisory lock`.
 
 **B. Manual.** Create a Web Service from the repo:
 - Root directory: `backend`
