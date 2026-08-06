@@ -1,0 +1,44 @@
+import { Router } from "express";
+import healthRoutes from "./health.routes.js";
+import authRoutes from "./auth.routes.js";
+import customerRoutes from "./customer.routes.js";
+import vehicleRoutes from "./vehicle.routes.js";
+import washRoutes from "./wash.routes.js";
+import serviceRoutes from "./service.routes.js";
+import employeeRoutes from "./employee.routes.js";
+import inventoryRoutes from "./inventory.routes.js";
+import expenseRoutes from "./expense.routes.js";
+import receiptRoutes from "./receipt.routes.js";
+import dashboardRoutes from "./dashboard.routes.js";
+import uploadRoutes from "./upload.routes.js";
+import settingsRoutes from "./settings.routes.js";
+import notificationRoutes from "./notification.routes.js";
+import auditRoutes from "./audit.routes.js";
+import reportRoutes from "./report.routes.js";
+import analyticsRoutes from "./analytics.routes.js";
+import roleRoutes from "./role.routes.js";
+import bookingRoutes from "./booking.routes.js";
+
+const apiRouter = Router();
+
+apiRouter.use("/health", healthRoutes);
+apiRouter.use("/auth", authRoutes);
+apiRouter.use("/customers", customerRoutes);
+apiRouter.use("/vehicles", vehicleRoutes);
+apiRouter.use("/wash-jobs", washRoutes);
+apiRouter.use("/services", serviceRoutes);
+apiRouter.use("/employees", employeeRoutes);
+apiRouter.use("/inventory", inventoryRoutes);
+apiRouter.use("/expenses", expenseRoutes);
+apiRouter.use("/receipts", receiptRoutes);
+apiRouter.use("/dashboard", dashboardRoutes);
+apiRouter.use("/upload", uploadRoutes);
+apiRouter.use("/settings", settingsRoutes);
+apiRouter.use("/notifications", notificationRoutes);
+apiRouter.use("/audit-logs", auditRoutes);
+apiRouter.use("/reports", reportRoutes);
+apiRouter.use("/analytics", analyticsRoutes);
+apiRouter.use("/roles", roleRoutes);
+apiRouter.use("/bookings", bookingRoutes);
+
+export default apiRouter;
