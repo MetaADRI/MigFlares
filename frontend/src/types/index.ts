@@ -403,6 +403,11 @@ export interface LoginRecord {
   ipAddress: string | null;
 }
 
+export interface LoginHistoryResult {
+  total: number;
+  data: LoginRecord[];
+}
+
 export type ReportType =
   | "REVENUE"
   | "CUSTOMERS"

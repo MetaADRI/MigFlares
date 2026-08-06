@@ -1,6 +1,27 @@
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
-import { Camera, Clock, KeyRound, Loader2, Lock, Mail, MapPin, Phone, Save, ShieldCheck, UserRound } from "lucide-react";
+import {
+  ArrowUpRight,
+  BellRing,
+  Camera,
+  Check,
+  Clock,
+  Copy,
+  KeyRound,
+  Loader2,
+  Lock,
+  LockKeyhole,
+  type LucideIcon,
+  Mail,
+  MapPin,
+  MonitorSmartphone,
+  Phone,
+  Pin,
+  Save,
+  ShieldCheck,
+  Timer,
+  UserRound,
+} from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/common/page-header";
 import { Avatar } from "@/components/ui/avatar";
@@ -8,11 +29,103 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { ROLE_META } from "@/constants";
 import { useAuth } from "@/hooks/use-auth";
 import { profileService } from "@/services/profile.service";
-import type { LoginRecord } from "@/types";
+import type { LoginHistoryResult } from "@/types";
 import { formatDateTime } from "@/utils/format";
+
+/** Developer contact shown in the "contact developer" dialog. */
+const DEVELOPER_CONTACT = {
+  email: "adrianmange00@gmail.com",
+  phone: "+260 96274 6692",
+} as const;
+
+interface ProtectionOption {
+  title: string;
+  description: string;
+  icon: LucideIcon;
+}
+
+/** Account protection options offered by the developer on request. */
+const PROTECTION_OPTIONS: ProtectionOption[] = [
+  {
+    title: "Two-factor authentication (TOTP)",
+    description:
+      "Add an extra layer of security with time-based one-time passwords (TOTP, RFC 6238). Can be implemented upon request.",
+    icon: ShieldCheck,
+  },
+  {
+    title: "Active sessions",
+    description:
+      "Sign out of other devices you're currently logged in on. Can be implemented upon request.",
+    icon: MonitorSmartphone,
+  },
+  {
+    title: "Account lockout",
+    description:
+      "Temporarily lock the account after repeated failed sign-in attempts. Can be implemented upon request.",
+    icon: LockKeyhole,
+  },
+  {
+    title: "Login alerts",
+    description:
+      "Get notified when your account signs in from a new device. Can be implemented upon request.",
+    icon: BellRing,
+  },
+  {
+    title: "Sensitive-action PIN",
+    description:
+      "Require a PIN before refunds, discounts or record deletions are approved. Can be implemented upon request.",
+    icon: Pin,
+  },
+  {
+    title: "Session timeout",
+    description:
+      "Automatically sign you out after a period of inactivity. Can be implemented upon request.",
+    icon: Timer,
+  },
+];
+
+/** Plain selectable contact value with a copy button (not a link). */
+function CopyField({ label, value }: { label: string; value: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1600);
+    } catch {
+      toast.error("Could not copy to clipboard");
+    }
+  };
+
+  return (
+    <div className="rounded-xl border border-border/60 bg-background/60 px-3.5 py-3">
+      <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
+      <div className="mt-1 flex items-center justify-between gap-3">
+        <span className="select-all truncate font-mono text-sm text-foreground">{value}</span>
+        <button
+          type="button"
+          onClick={() => void copy()}
+          aria-label={`Copy ${label.toLowerCase()}`}
+          className="grid size-7 shrink-0 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        >
+          {copied ? <Check className="size-3.5 text-emerald-500" /> : <Copy className="size-3.5" />}
+        </button>
+      </div>
+    </div>
+  );
+}
 
 export default function ProfilePage() {
   const { user } = useAuth();
@@ -24,7 +137,8 @@ export default function ProfilePage() {
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [logins, setLogins] = useState<LoginRecord[]>([]);
+  const [logins, setLogins] = useState<LoginHistoryResult | null>(null);
+  const [contactOpen, setContactOpen] = useState(false);
 
   useEffect(() => {
     void profileService.loginHistory().then(setLogins).catch(() => undefined);
@@ -200,20 +314,27 @@ export default function ProfilePage() {
               </div>
             </div>
             <div className="divide-y divide-border/60">
-              <div className="flex items-center justify-between py-3">
-                <div>
-                  <p className="text-sm font-medium text-foreground">Two-factor authentication</p>
-                  <p className="text-xs text-muted-foreground">Add an extra layer of security (coming soon).</p>
+              {PROTECTION_OPTIONS.map((option) => (
+                <div key={option.title} className="flex items-center justify-between gap-4 py-3">
+                  <div className="flex min-w-0 items-start gap-3">
+                    <div className="grid size-8 shrink-0 place-items-center rounded-lg border border-border/60 bg-background/60 text-muted-foreground">
+                      <option.icon className="size-4" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-foreground">{option.title}</p>
+                      <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">{option.description}</p>
+                    </div>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="shrink-0"
+                    onClick={() => setContactOpen(true)}
+                  >
+                    Contact developer
+                  </Button>
                 </div>
-                <Badge variant="secondary">Placeholder</Badge>
-              </div>
-              <div className="flex items-center justify-between py-3">
-                <div>
-                  <p className="text-sm font-medium text-foreground">Active sessions</p>
-                  <p className="text-xs text-muted-foreground">Sign out of other devices (placeholder).</p>
-                </div>
-                <Badge variant="secondary">Placeholder</Badge>
-              </div>
+              ))}
             </div>
           </div>
         </motion.div>
@@ -229,21 +350,55 @@ export default function ProfilePage() {
                 <p className="text-xs text-muted-foreground">Your latest sign-in activity.</p>
               </div>
             </div>
-            {logins.length === 0 ? (
-              <p className="py-6 text-center text-sm text-muted-foreground">No recent logins recorded.</p>
-            ) : (
-              <div className="space-y-2.5">
-                {logins.map((login, i) => (
-                  <div key={i} className="flex items-center justify-between rounded-xl border border-border/60 bg-background/60 px-3.5 py-2.5 text-sm">
-                    <span className="font-medium text-foreground">{formatDateTime(login.createdAt)}</span>
-                    <span className="font-mono text-xs text-muted-foreground">{login.ipAddress ?? "—"}</span>
+            {logins ? (
+              <>
+                <div className="mb-3 flex items-center justify-between rounded-xl border border-border/60 bg-background/60 px-3.5 py-2.5 text-sm">
+                  <span className="text-muted-foreground">Total sign-ins</span>
+                  <span className="font-display text-base font-bold text-foreground">{logins.total}</span>
+                </div>
+                {logins.data.length === 0 ? (
+                  <p className="py-6 text-center text-sm text-muted-foreground">No recent logins recorded.</p>
+                ) : (
+                  <div className="space-y-2.5">
+                    {logins.data.map((login, i) => (
+                      <div key={i} className="flex items-center justify-between rounded-xl border border-border/60 bg-background/60 px-3.5 py-2.5 text-sm">
+                        <span className="font-medium text-foreground">{formatDateTime(login.createdAt)}</span>
+                        <span className="font-mono text-xs text-muted-foreground">{login.ipAddress ?? "—"}</span>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-            )}
+                )}
+              </>
+            ) : null}
           </div>
         </motion.div>
       </div>
+
+      {/* Contact developer dialog */}
+      <Dialog open={contactOpen} onOpenChange={setContactOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Contact the developer</DialogTitle>
+            <DialogDescription>
+              These features can be implemented upon request. Reach out to the developer to discuss setup
+              and pricing.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2.5">
+            <CopyField label="Email" value={DEVELOPER_CONTACT.email} />
+            <CopyField label="Phone / WhatsApp" value={DEVELOPER_CONTACT.phone} />
+          </div>
+          <p className="flex items-start gap-2 text-xs text-muted-foreground">
+            <ArrowUpRight className="mt-0.5 size-3.5 shrink-0" />
+            Copy the details above and send a message — the developer will get back to you.
+          </p>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setContactOpen(false)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

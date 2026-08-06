@@ -9,6 +9,10 @@ import apiRouter from "./routes/index.js";
 
 export const app = express();
 
+// Render (and other hosts) sit behind a proxy — trust the first hop so
+// req.ip resolves the real client address from X-Forwarded-For.
+app.set("trust proxy", 1);
+
 // Security & parsing
 app.use(
   helmet({

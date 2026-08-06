@@ -17,6 +17,7 @@ export const login = asyncHandler(async (req: Request, res: Response) => {
     userId: result.user.id,
     branchId: req.user?.branchId ?? null,
     details: { username: req.body.username },
+    ipAddress: req.ip ?? null,
   });
   res.json(ok(result));
 });

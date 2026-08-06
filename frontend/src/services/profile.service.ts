@@ -1,4 +1,4 @@
-import type { LoginRecord, User } from "@/types";
+import type { LoginHistoryResult, User } from "@/types";
 import { api } from "@/services/api";
 
 export interface ProfileInput {
@@ -18,8 +18,8 @@ export const profileService = {
     await api.post("/auth/change-password", { currentPassword, newPassword });
   },
 
-  async loginHistory(): Promise<LoginRecord[]> {
-    const { data } = await api.get<LoginRecord[]>("/auth/login-history");
+  async loginHistory(): Promise<LoginHistoryResult> {
+    const { data } = await api.get<LoginHistoryResult>("/auth/logins");
     return data;
   },
 };

@@ -167,14 +167,22 @@ export async function changePassword(
 }
 
 /** Recent logins, derived from the audit trail. */
-export async function recentLogins(userId: string): Promise<{ createdAt: string; ipAddress: string | null }[]> {
-  const rows = await prisma.auditLog.findMany({
-    where: { userId, action: "LOGIN" },
-    orderBy: { createdAt: "desc" },
-    take: 10,
-    select: { createdAt: true, ipAddress: true },
-  });
-  return rows.map((r) => ({ createdAt: r.createdAt.toISOString(), ipAddress: r.ipAddress }));
+export async function recentLogins(
+  userId: string,
+): Promise<{ total: number; data: { createdAt: string; ipAddress: string | null }[] }> {
+  const [rows, total] = await prisma.$transaction([
+    prisma.auditLog.findMany({
+      where: { userId, action: "LOGIN" },
+      orderBy: { createdAt: "desc" },
+      take: 10,
+      select: { createdAt: true, ipAddress: true },
+    }),
+    prisma.auditLog.count({ where: { userId, action: "LOGIN" } }),
+  ]);
+  return {
+    total,
+    data: rows.map((r) => ({ createdAt: r.createdAt.toISOString(), ipAddress: r.ipAddress })),
+  };
 }
 
 export async function getMe(userId: string): Promise<PublicUser> {
