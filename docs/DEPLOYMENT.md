@@ -49,7 +49,6 @@ In Render → New → Blueprint, connect the repo. Render reads `render.yaml`
 `sync: false` env vars in the service dashboard:
 ```
 DATABASE_URL=<neon pooled url>
-DIRECT_URL=<neon direct (unpooled) url>
 JWT_ACCESS_SECRET=<long random>
 JWT_REFRESH_SECRET=<long random>
 CORS_ORIGIN=https://<your-project>.pages.dev
@@ -58,17 +57,25 @@ CLOUDINARY_API_KEY=...
 CLOUDINARY_API_SECRET=...
 ```
 
-> **Note:** `DIRECT_URL` is required. The start command runs `prisma migrate deploy`,
-> which needs the non-pooled connection to acquire database locks. Without it the
-> deploy fails with `P1002: timed out acquiring a postgres advisory lock`.
+`DIRECT_URL` is optional. The start script (`scripts/migrate-and-start.sh`) runs
+`prisma migrate deploy`, which needs the non-pooled connection for database
+locks. When `DIRECT_URL` is absent it is derived automatically from
+`DATABASE_URL` (host minus `-pooler`). Only set it explicitly to override the
+derived host.
 
 **B. Manual.** Create a Web Service from the repo:
 - Root directory: `backend`
 - Build command: `npm ci && npx prisma generate && npm run build`
-- Start command: `npx prisma migrate deploy && npm start`
+- Start command: `sh scripts/migrate-and-start.sh`
 - Health check path: `/api/health`
 
 Deploy. Your API is at `https://<service>.onrender.com/api`.
+
+> **Note:** The start script runs `prisma migrate deploy` before starting the API.
+> Migrations need Neon's **direct** (non-pooled) connection for advisory locks.
+> If `DIRECT_URL` is not set, the script derives it automatically from
+> `DATABASE_URL` by stripping `-pooler` from the host — so no extra env var is
+> required. Set `DIRECT_URL` explicitly only if you want to override the host.
 
 > **Note:** Render free instances sleep after inactivity. Use a paid instance or a
 > UptimeRobot/cron health-check ping for 24/7 availability.
