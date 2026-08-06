@@ -4,37 +4,72 @@ import bcrypt from "bcryptjs";
 /* ===================================================================== */
 /* Reset operational data — keeps the system ready for production.       */
 /* --------------------------------------------------------------------- */
-/* Keeps:  Branch, Role, Permission, RolePermission, User, Settings.     */
+/* Keeps:  Branch, Role, Permission, RolePermission, User, Settings      */
+/*         (minus per-day reference counters), PayrollRule.              */
 /* Wipes:  receipts, washes, bookings, expenses, inventory movements,    */
-/*         notifications, audit logs, customers, vehicles, inventory,    */
-/*         employees, services, and per-day reference counters.          */
+/*         salary payments, time entries, attendance records, leave      */
+/*         requests, payroll runs, payslips, notifications, audit logs,  */
+/*         customers, vehicles, inventory, employees, services.          */
+/* Re-creates the 4 seed logins' employee records (admin/manager/        */
+/* cashier/attendant) so login-based attendance keeps working.           */
 /* Also ensures the bookings permissions exist on every active role.     */
 /* ===================================================================== */
 
-const prisma = new PrismaClient();
+// Prefer the direct (non-pooled) Neon endpoint: PgBouncer caps the pool at 5
+// connections, which starves under network jitter. The retry loop below handles
+// the remaining flakiness.
+const prisma = new PrismaClient({
+  datasourceUrl: process.env.DIRECT_URL ?? process.env.DATABASE_URL!,
+});
 
 const BOOKING_PERMISSIONS = [
   { key: "bookings:view", module: "BOOKINGS", name: "View bookings", description: "See the appointment calendar and bookings" },
   { key: "bookings:manage", module: "BOOKINGS", name: "Manage bookings", description: "Create, reschedule and update bookings" },
 ];
 
+/* Retry transient Neon connection drops/timeouts (P1001/P1002/P1017/P2024) —
+   every step is idempotent, so a failed attempt can simply be retried. */
+const RETRIES = 8;
+async function retry<T>(label: string, fn: () => Promise<T>): Promise<T> {
+  for (let attempt = 1; attempt <= RETRIES; attempt++) {
+    try {
+      return await fn();
+    } catch (err: any) {
+      const code = err?.code;
+      if ((code === "P1001" || code === "P1002" || code === "P1017" || code === "P2024") && attempt < RETRIES) {
+        console.log(`[reset] ${label} failed (${code}) — retry ${attempt}/${RETRIES - 1}`);
+        await new Promise((r) => setTimeout(r, 3000));
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw new Error(`unreachable: ${label}`);
+}
+
 async function main() {
   console.log("[reset] Starting…");
 
   // ---- Wipe operational tables (FK-safe order) ----
-  await prisma.receipt.deleteMany({});
-  await prisma.washRecord.deleteMany({});
-  await prisma.booking.deleteMany({});
-  await prisma.expense.deleteMany({});
-  await prisma.inventoryMovement.deleteMany({});
-  await prisma.notification.deleteMany({});
-  await prisma.auditLog.deleteMany({});
-  await prisma.serviceInventoryRequirement.deleteMany({});
-  await prisma.vehicle.deleteMany({});
-  await prisma.customer.deleteMany({});
-  await prisma.inventoryItem.deleteMany({});
-  await prisma.employee.deleteMany({});
-  await prisma.service.deleteMany({});
+  await retry("payslips", () => prisma.payslip.deleteMany({}));
+  await retry("payroll runs", () => prisma.payrollRun.deleteMany({}));
+  await retry("receipts", () => prisma.receipt.deleteMany({}));
+  await retry("wash records", () => prisma.washRecord.deleteMany({}));
+  await retry("bookings", () => prisma.booking.deleteMany({}));
+  await retry("expenses", () => prisma.expense.deleteMany({}));
+  await retry("inventory movements", () => prisma.inventoryMovement.deleteMany({}));
+  await retry("salary payments", () => prisma.salaryPayment.deleteMany({}));
+  await retry("time entries", () => prisma.timeEntry.deleteMany({}));
+  await retry("attendance records", () => prisma.attendanceRecord.deleteMany({}));
+  await retry("leave requests", () => prisma.leaveRequest.deleteMany({}));
+  await retry("notifications", () => prisma.notification.deleteMany({}));
+  await retry("audit logs", () => prisma.auditLog.deleteMany({}));
+  await retry("service requirements", () => prisma.serviceInventoryRequirement.deleteMany({}));
+  await retry("vehicles", () => prisma.vehicle.deleteMany({}));
+  await retry("customers", () => prisma.customer.deleteMany({}));
+  await retry("inventory", () => prisma.inventoryItem.deleteMany({}));
+  await retry("employees", () => prisma.employee.deleteMany({}));
+  await retry("services", () => prisma.service.deleteMany({}));
   console.log("[reset] Operational records wiped");
 
   // ---- Reset per-day reference counters (WF_COUNTER_*, RCP_COUNTER_*, BK_COUNTER_*) ----
@@ -65,8 +100,44 @@ async function main() {
   }
   console.log(`[reset] Bookings permissions attached to ${roles.length} active roles`);
 
+  // ---- Re-create the seed logins' employee records ----
+  // Kept so clock-in-on-login still feeds attendance after the wipe.
+  const users = await prisma.user.findMany();
+  const byUsername = new Map(users.map((u) => [u.username, u]));
+  const staff: { username: string; firstName: string; lastName: string; position: string; salary: number | null; payrollEnabled: boolean }[] = [
+    { username: "admin", firstName: "Mig", lastName: "Flares", position: "Owner", salary: null, payrollEnabled: false },
+    { username: "manager", firstName: "Chanda", lastName: "Mulenga", position: "Manager", salary: 7000, payrollEnabled: true },
+    { username: "cashier", firstName: "Peter", lastName: "Zimba", position: "Cashier", salary: 3200, payrollEnabled: true },
+    { username: "attendant", firstName: "Collins", lastName: "Sakala", position: "Attendant", salary: 2800, payrollEnabled: true },
+  ];
+  let recreated = 0;
+  for (const s of staff) {
+    const user = byUsername.get(s.username);
+    if (!user) continue;
+    await prisma.employee.create({
+      data: {
+        firstName: s.firstName,
+        lastName: s.lastName,
+        position: s.position,
+        phone: user.phone ?? "",
+        email: user.email ?? null,
+        salary: s.salary,
+        payday: 25,
+        employmentType: "FULL_TIME",
+        payrollEnabled: s.payrollEnabled,
+        attendanceRequired: true,
+        overtimeEligible: true,
+        isActive: true,
+        userId: user.id,
+        branchId: user.branchId,
+      },
+    });
+    recreated++;
+  }
+  console.log(`[reset] Re-created ${recreated} employee records linked to seed logins`);
+
   // ---- Integrity guard: every seeded login still works ----
-  const admin = await prisma.user.findUnique({ where: { username: "admin" } });
+  const admin = byUsername.get("admin");
   if (!admin) {
     console.log("[reset] WARN: admin user missing — run `npm run db:seed` to recreate logins.");
   } else if (!(await bcrypt.compare("admin123", admin.passwordHash))) {
@@ -87,6 +158,9 @@ async function main() {
     expenses: await prisma.expense.count(),
     notifications: await prisma.notification.count(),
     auditLogs: await prisma.auditLog.count(),
+    attendance: await prisma.attendanceRecord.count(),
+    leave: await prisma.leaveRequest.count(),
+    payrollRuns: await prisma.payrollRun.count(),
   };
   console.log("[reset] Post-reset counts:", counts);
 }

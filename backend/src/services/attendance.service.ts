@@ -262,30 +262,54 @@ export async function getMyAttendance(employeeId: string, query: AttendanceListQ
   return listAttendance({ ...query, employeeId }, null);
 }
 
-/** Today's headcount snapshot by status + staff currently clocked in. */
+/** Today's headcount snapshot by status + staff currently clocked in.
+ *  Present/late come from today's records; on-leave is derived from APPROVED
+ *  leave covering today plus any ON_LEAVE records; absent is everyone else
+ *  on the active roster — so the tabs stay live as people clock in. */
 export async function getTodaySummary(branchId: string | null) {
   const date = startOfDayLocal(new Date());
-  const where: Prisma.AttendanceRecordWhereInput = { date, ...(branchId ? { branchId } : {}) };
-  const [rows, clockedIn] = await Promise.all([
-    prisma.attendanceRecord.groupBy({
-      by: ["status"],
-      where,
-      _count: { _all: true },
+  const tomorrow = new Date(date.getTime() + 86_400_000);
+  const scope = branchId ? { branchId } : {};
+  const [records, clockedIn, active, approvedLeave] = await Promise.all([
+    prisma.attendanceRecord.findMany({ where: { date, ...scope }, select: { employeeId: true, status: true } }),
+    prisma.timeEntry.count({ where: { clockOutAt: null, ...scope } }),
+    prisma.employee.findMany({
+      where: { isActive: true, attendanceRequired: true, ...scope },
+      select: { id: true },
     }),
-    prisma.timeEntry.count({
-      where: { clockOutAt: null, ...(branchId ? { branchId } : {}) },
+    prisma.leaveRequest.findMany({
+      where: { status: "APPROVED", startDate: { lte: tomorrow }, endDate: { gte: date } },
+      select: { employeeId: true },
     }),
   ]);
-  const counts: Record<string, number> = {};
-  for (const r of rows) counts[r.status] = r._count._all;
+
+  let present = 0;
+  let late = 0;
+  let holiday = 0;
+  const onLeaveRecorded = new Set<string>();
+  for (const r of records) {
+    if (r.status === "PRESENT") present++;
+    else if (r.status === "LATE") late++;
+    else if (r.status === "HOLIDAY") holiday++;
+    else if (r.status === "ON_LEAVE") onLeaveRecorded.add(r.employeeId);
+  }
+
+  const activeIds = new Set(active.map((e) => e.id));
+  const onLeaveApproved = new Set<string>();
+  for (const l of approvedLeave) {
+    if (activeIds.has(l.employeeId)) onLeaveApproved.add(l.employeeId);
+  }
+  const onLeave = new Set([...onLeaveRecorded, ...onLeaveApproved]).size;
+  const absent = Math.max(0, active.length - present - late - holiday - onLeave);
+
   return {
     date: date.toISOString(),
-    present: counts.PRESENT ?? 0,
-    late: counts.LATE ?? 0,
-    absent: counts.ABSENT ?? 0,
-    onLeave: counts.ON_LEAVE ?? 0,
-    holiday: counts.HOLIDAY ?? 0,
-    total: rows.reduce((sum, r) => sum + r._count._all, 0),
+    present,
+    late,
+    absent,
+    onLeave,
+    holiday,
+    total: present + late + absent + onLeave + holiday,
     clockedInNow: clockedIn,
   };
 }

@@ -34,7 +34,7 @@ export async function getAnalyticsOverview(branchId: string | null) {
           customer: { select: { firstName: true, lastName: true } },
         },
       }),
-      prisma.customer.findMany({ where: whereBranch, select: { createdAt: true, status: true, totalSpent: true } }),
+      prisma.customer.findMany({ where: whereBranch, select: { id: true } }),
       prisma.employee.findMany({ where: { ...whereBranch, isActive: true }, select: { id: true } }),
       prisma.service.findMany({ where: { ...whereBranch, isActive: true }, select: { id: true, name: true } }),
       prisma.expense.findMany({ where: whereBranch, select: { amount: true, expenseDate: true, category: true } }),
