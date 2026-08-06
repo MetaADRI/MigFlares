@@ -21,6 +21,7 @@ export const env = {
     refreshExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN ?? "7d",
   },
   corsOrigin: process.env.CORS_ORIGIN ?? "http://localhost:5173,http://localhost:5174",
+  appTimezone: process.env.APP_TIMEZONE ?? "Africa/Lusaka",
   cloudinary: {
     cloudName: process.env.CLOUDINARY_CLOUD_NAME,
     apiKey: process.env.CLOUDINARY_API_KEY,

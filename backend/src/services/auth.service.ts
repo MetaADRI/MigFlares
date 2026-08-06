@@ -1,6 +1,7 @@
 import bcrypt from "bcryptjs";
 import type { Prisma, User } from "@prisma/client";
 import { prisma } from "../config/database.js";
+import { env } from "../config/env.js";
 import { ApiError } from "../utils/api-error.js";
 import { signAccessToken, signRefreshToken, verifyRefreshToken } from "../utils/token.js";
 
@@ -170,19 +171,57 @@ export async function changePassword(
 export async function recentLogins(
   userId: string,
 ): Promise<{ total: number; data: { createdAt: string; ipAddress: string | null }[] }> {
+  // Login history is day-scoped: it starts tracking every sign-in at local
+  // midnight and resets (only today's entries are returned) at the next one.
+  const startOfDay = startOfTodayInZone(env.appTimezone);
+  const where: Prisma.AuditLogWhereInput = {
+    userId,
+    action: "LOGIN",
+    createdAt: { gte: startOfDay },
+  };
   const [rows, total] = await prisma.$transaction([
     prisma.auditLog.findMany({
-      where: { userId, action: "LOGIN" },
+      where,
       orderBy: { createdAt: "desc" },
-      take: 10,
       select: { createdAt: true, ipAddress: true },
     }),
-    prisma.auditLog.count({ where: { userId, action: "LOGIN" } }),
+    prisma.auditLog.count({ where }),
   ]);
   return {
     total,
     data: rows.map((r) => ({ createdAt: r.createdAt.toISOString(), ipAddress: r.ipAddress })),
   };
+}
+
+/**
+ * UTC instant of local midnight (start of today) in a given IANA timezone.
+ * Exact for fixed-offset zones (Africa/Lusaka has no DST); the offset is
+ * measured at "now", which is stable across the day for fixed-offset zones.
+ */
+function startOfTodayInZone(timeZone: string, now = new Date()): Date {
+  const dtf = new Intl.DateTimeFormat("en-CA", {
+    timeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  });
+  const parts = dtf.formatToParts(now);
+  const get = (type: Intl.DateTimeFormatPartTypes): number =>
+    Number(parts.find((p) => p.type === type)?.value ?? 0);
+  const localAsUtc = Date.UTC(
+    get("year"),
+    get("month") - 1,
+    get("day"),
+    get("hour"),
+    get("minute"),
+    get("second"),
+  );
+  const offsetMs = localAsUtc - now.getTime();
+  return new Date(Date.UTC(get("year"), get("month") - 1, get("day")) - offsetMs);
 }
 
 export async function getMe(userId: string): Promise<PublicUser> {

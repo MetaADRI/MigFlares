@@ -347,17 +347,17 @@ export default function ProfilePage() {
               </div>
               <div>
                 <h3 className="font-display text-base font-semibold text-foreground">Recent logins</h3>
-                <p className="text-xs text-muted-foreground">Your latest sign-in activity.</p>
+                <p className="text-xs text-muted-foreground">Sign-in activity today — resets at midnight.</p>
               </div>
             </div>
             {logins ? (
               <>
                 <div className="mb-3 flex items-center justify-between rounded-xl border border-border/60 bg-background/60 px-3.5 py-2.5 text-sm">
-                  <span className="text-muted-foreground">Total sign-ins</span>
+                  <span className="text-muted-foreground">Sign-ins today</span>
                   <span className="font-display text-base font-bold text-foreground">{logins.total}</span>
                 </div>
                 {logins.data.length === 0 ? (
-                  <p className="py-6 text-center text-sm text-muted-foreground">No recent logins recorded.</p>
+                  <p className="py-6 text-center text-sm text-muted-foreground">No logins recorded today.</p>
                 ) : (
                   <div className="space-y-2.5">
                     {logins.data.map((login, i) => (
