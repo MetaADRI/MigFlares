@@ -15,7 +15,7 @@ export const profileService = {
   },
 
   async changePassword(currentPassword: string, newPassword: string): Promise<void> {
-    await api.post("/auth/change-password", { currentPassword, newPassword });
+    await api.patch("/auth/password", { currentPassword, newPassword });
   },
 
   async loginHistory(): Promise<LoginHistoryResult> {

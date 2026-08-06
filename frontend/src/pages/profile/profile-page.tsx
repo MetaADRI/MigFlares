@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import {
   ArrowUpRight,
@@ -40,6 +40,7 @@ import {
 import { ROLE_META } from "@/constants";
 import { useAuth } from "@/hooks/use-auth";
 import { profileService } from "@/services/profile.service";
+import { uploadImage } from "@/services/upload.service";
 import type { LoginHistoryResult } from "@/types";
 import { formatDateTime } from "@/utils/format";
 
@@ -128,17 +129,19 @@ function CopyField({ label, value }: { label: string; value: string }) {
 }
 
 export default function ProfilePage() {
-  const { user } = useAuth();
+  const { user, updateUser } = useAuth();
   const [fullName, setFullName] = useState(user?.fullName ?? "");
   const [email, setEmail] = useState(user?.email ?? "");
   const [phone, setPhone] = useState(user?.phone ?? "");
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [changing, setChanging] = useState(false);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [logins, setLogins] = useState<LoginHistoryResult | null>(null);
   const [contactOpen, setContactOpen] = useState(false);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     void profileService.loginHistory().then(setLogins).catch(() => undefined);
@@ -149,12 +152,36 @@ export default function ProfilePage() {
   const saveProfile = async () => {
     setSaving(true);
     try {
-      await profileService.update({ fullName, email: email || null, phone: phone || null });
+      const updated = await profileService.update({ fullName, email: email || null, phone: phone || null });
+      updateUser(updated);
       toast.success("Profile updated");
     } catch {
       toast.error("Could not update profile");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const uploadAvatar = async (file: File | undefined) => {
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast.error("Please choose an image file");
+      return;
+    }
+    if (file.size > 3 * 1024 * 1024) {
+      toast.error("Image must be under 3 MB");
+      return;
+    }
+    setUploading(true);
+    try {
+      const url = await uploadImage(file);
+      const updated = await profileService.update({ avatarUrl: url });
+      updateUser(updated);
+      toast.success("Profile picture updated");
+    } catch {
+      toast.error("Could not upload profile picture");
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -198,16 +225,36 @@ export default function ProfilePage() {
           <div className="h-24 bg-gradient-to-br from-orange-500/20 via-orange-400/10 to-amber-100/30" />
           <div className="-mt-10 flex flex-col items-center px-6 pb-6">
             <div className="relative">
-              <Avatar name={user.fullName} size="lg" />
+              <Avatar name={user.fullName} src={user.avatarUrl} size="lg" />
               <button
                 type="button"
                 aria-label="Change photo"
-                className="absolute -bottom-1 -right-1 grid size-8 place-items-center rounded-full bg-primary text-white shadow-md transition-transform hover:scale-110"
-                onClick={() => toast.info("Cloudinary avatar upload coming soon")}
+                title="Upload profile picture"
+                className="absolute -bottom-1 -right-1 grid size-8 place-items-center rounded-full bg-primary text-white shadow-md transition-transform hover:scale-110 disabled:opacity-60"
+                onClick={() => avatarInputRef.current?.click()}
+                disabled={uploading}
               >
-                <Camera className="size-4" />
+                {uploading ? <Loader2 className="size-4 animate-spin" /> : <Camera className="size-4" />}
               </button>
             </div>
+            <button
+              type="button"
+              className="mt-2 text-xs font-medium text-primary transition-colors hover:underline disabled:opacity-60"
+              onClick={() => avatarInputRef.current?.click()}
+              disabled={uploading}
+            >
+              {uploading ? "Uploading…" : "Change photo"}
+            </button>
+            <input
+              ref={avatarInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => {
+                void uploadAvatar(e.target.files?.[0]);
+                e.target.value = "";
+              }}
+            />
             <h2 className="mt-3 font-display text-lg font-bold text-foreground">{user.fullName}</h2>
             <p className="text-sm text-muted-foreground">@{user.username}</p>
             <Badge variant="secondary" className={`mt-2 ${roleMeta.className}`}>

@@ -125,7 +125,7 @@ export function Topbar({ onMenuClick }: TopbarProps) {
               className="flex items-center gap-2 rounded-xl p-1 pr-2 transition-colors hover:bg-muted/70"
               aria-label="Account menu"
             >
-              <Avatar name={user?.fullName ?? "User"} size="sm" />
+              <Avatar name={user?.fullName ?? "User"} src={user?.avatarUrl} size="sm" />
               <span className="hidden text-left sm:block">
                 <span className="block max-w-[140px] truncate text-sm font-medium leading-tight text-foreground">
                   {user?.fullName}

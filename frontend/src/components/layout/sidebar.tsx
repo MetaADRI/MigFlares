@@ -63,7 +63,7 @@ export function SidebarContent({ onNavigate }: { onNavigate?: () => void }) {
 
       <div className="shrink-0 border-t border-sidebar-border p-3">
         <div className="flex items-center gap-3 rounded-xl bg-white/[0.04] px-3 py-2.5">
-          <Avatar name={user?.fullName ?? "User"} size="sm" />
+          <Avatar name={user?.fullName ?? "User"} src={user?.avatarUrl} size="sm" />
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-medium text-white">{user?.fullName}</p>
             <p className="truncate text-[11px] capitalize text-sidebar-muted">
