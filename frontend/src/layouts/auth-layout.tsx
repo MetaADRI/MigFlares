@@ -27,7 +27,7 @@ export function AuthLayout() {
       <div className="relative z-10 flex w-full max-w-[440px] flex-col items-center">
         <div className="mb-8 flex flex-col items-center gap-3 text-center">
           <img
-            src="/logolanding.jpeg"
+            src="/login-logo.jpeg"
             alt={BRAND.name}
             className="h-24 w-auto max-w-[300px] rounded-2xl object-contain drop-shadow-[0_8px_28px_rgba(244,123,32,0.35)]"
           />
