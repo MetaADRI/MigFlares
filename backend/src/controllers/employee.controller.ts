@@ -1,7 +1,13 @@
 import type { Request, Response } from "express";
+import { prisma } from "../config/database.js";
 import { created, ok } from "../utils/api-response.js";
 import { asyncHandler } from "../utils/async-handler.js";
+import { ApiError } from "../utils/api-error.js";
+import { requireOwnEmployee } from "../utils/employee-access.js";
 import * as employeeService from "../services/employee.service.js";
+import * as attendanceService from "../services/attendance.service.js";
+import * as leaveService from "../services/leave.service.js";
+import * as payrollService from "../services/payroll.service.js";
 
 export const list = asyncHandler(async (req: Request, res: Response) => {
   const result = await employeeService.listEmployees(
@@ -69,4 +75,68 @@ export const clockIn = asyncHandler(async (req: Request, res: Response) => {
 export const clockOut = asyncHandler(async (req: Request, res: Response) => {
   const entry = await employeeService.clockOut(String(req.params.id), String(req.body.notes ?? ""));
   res.json(ok(entry, "Clocked out"));
+});
+
+/* ------------------------------------------------------------------ */
+/* Self-service (/employees/me/*) — resolved from the logged-in user.  */
+/* ------------------------------------------------------------------ */
+
+export const myAttendance = asyncHandler(async (req: Request, res: Response) => {
+  const employeeId = await requireOwnEmployee(req.user!.sub);
+  const result = await attendanceService.getMyAttendance(
+    employeeId,
+    req.query as unknown as attendanceService.AttendanceListQuery,
+  );
+  res.json(ok(result));
+});
+
+export const myLeave = asyncHandler(async (req: Request, res: Response) => {
+  const employeeId = await requireOwnEmployee(req.user!.sub);
+  const result = await leaveService.getMyLeave(
+    employeeId,
+    req.query as unknown as leaveService.LeaveListQuery,
+  );
+  res.json(ok(result));
+});
+
+export const myLeaveBalances = asyncHandler(async (req: Request, res: Response) => {
+  const employeeId = await requireOwnEmployee(req.user!.sub);
+  const balances = await leaveService.getLeaveBalances(employeeId);
+  res.json(ok(balances));
+});
+
+export const myCreateLeave = asyncHandler(async (req: Request, res: Response) => {
+  const employeeId = await requireOwnEmployee(req.user!.sub);
+  const request = await leaveService.createLeaveRequest(
+    employeeId,
+    req.body,
+    req.user?.branchId ?? null,
+  );
+  res.status(201).json(created(request, "Leave requested"));
+});
+
+export const myCancelLeave = asyncHandler(async (req: Request, res: Response) => {
+  const employeeId = await requireOwnEmployee(req.user!.sub);
+  const existing = await prisma.leaveRequest.findUnique({
+    where: { id: String(req.params.id) },
+    select: { employeeId: true },
+  });
+  if (!existing || existing.employeeId !== employeeId) throw ApiError.forbidden();
+  const request = await leaveService.cancelLeaveRequest(String(req.params.id));
+  res.json(ok(request, "Leave request cancelled"));
+});
+
+export const myPayslips = asyncHandler(async (req: Request, res: Response) => {
+  const employeeId = await requireOwnEmployee(req.user!.sub);
+  const result = await payrollService.getMyPayslips(
+    employeeId,
+    req.query as unknown as payrollService.PayslipQuery,
+  );
+  res.json(ok(result));
+});
+
+export const myPayrollSummary = asyncHandler(async (req: Request, res: Response) => {
+  const employeeId = await requireOwnEmployee(req.user!.sub);
+  const summary = await payrollService.getMyPayrollSummary(employeeId);
+  res.json(ok(summary));
 });

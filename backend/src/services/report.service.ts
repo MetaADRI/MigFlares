@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { prisma } from "../config/database.js";
 
 /* ------------------------------------------------------------------ */
@@ -13,7 +14,11 @@ export type ReportType =
   | "EXPENSES"
   | "SERVICES"
   | "WASH_JOBS"
-  | "RECEIPTS";
+  | "RECEIPTS"
+  | "ATTENDANCE"
+  | "LEAVE"
+  | "PAYROLL"
+  | "OVERTIME";
 
 export type PeriodKey = "today" | "yesterday" | "week" | "month" | "year" | "custom";
 
@@ -529,6 +534,231 @@ async function receiptsReport(from: Date, to: Date, branchId: string | null): Pr
   };
 }
 
+async function attendanceReport(from: Date, to: Date, branchId: string | null): Promise<ReportParts> {
+  const where: Prisma.AttendanceRecordWhereInput = {
+    date: { gte: from, lt: to },
+    ...(branchId ? { branchId } : {}),
+  };
+  const [records, byStatus] = await Promise.all([
+    prisma.attendanceRecord.findMany({
+      where,
+      include: { employee: { select: { firstName: true, lastName: true, position: true } } },
+    }),
+    prisma.attendanceRecord.groupBy({ by: ["status"], where, _count: { _all: true } }),
+  ]);
+  const total = records.length;
+  const count = (s: string) => byStatus.find((b) => b.status === s)?._count._all ?? 0;
+  const presentLike = count("PRESENT") + count("LATE");
+  const attendanceRate = total > 0 ? Math.round((presentLike / total) * 100) : 0;
+
+  const buckets = buildBuckets(from, to);
+  const series = buckets.map((b) => {
+    const bucketRecords = records.filter((r) => {
+      const t = r.date.getTime();
+      return t >= b.start.getTime() && t < b.end.getTime();
+    });
+    const presentLikeHere = bucketRecords.filter(
+      (r) => r.status === "PRESENT" || r.status === "LATE",
+    ).length;
+    return {
+      label: b.label,
+      value: bucketRecords.length,
+      secondary:
+        bucketRecords.length > 0 ? Math.round((presentLikeHere / bucketRecords.length) * 100) : 0,
+    };
+  });
+
+  const byEmployee = new Map<string, { name: string; position: string; worked: number; late: number; absent: number; onLeave: number; overtimeH: number }>();
+  for (const r of records) {
+    const name = `${r.employee.firstName} ${r.employee.lastName}`;
+    const existing = byEmployee.get(r.employeeId) ?? {
+      name,
+      position: r.employee.position,
+      worked: 0,
+      late: 0,
+      absent: 0,
+      onLeave: 0,
+      overtimeH: 0,
+    };
+    if (r.status === "PRESENT") existing.worked += 1;
+    if (r.status === "LATE") {
+      existing.worked += 1;
+      existing.late += 1;
+    }
+    if (r.status === "ABSENT") existing.absent += 1;
+    if (r.status === "ON_LEAVE") existing.onLeave += 1;
+    existing.overtimeH += Number(r.overtimeHours ?? 0);
+    byEmployee.set(r.employeeId, existing);
+  }
+  const table = [...byEmployee.values()]
+    .sort((a, b) => b.worked - a.worked)
+    .map((e) => ({
+      employee: e.name,
+      position: e.position,
+      workedDays: e.worked,
+      lateDays: e.late,
+      absentDays: e.absent,
+      leaveDays: e.onLeave,
+      overtimeHours: round(e.overtimeH),
+    }));
+
+  return {
+    summary: [
+      { label: "Records in period", value: total, kind: "number" as const },
+      { label: "Attendance rate", value: attendanceRate, kind: "percent" as const },
+      { label: "Late arrivals", value: count("LATE"), kind: "number" as const },
+      { label: "Absent", value: count("ABSENT"), kind: "number" as const },
+    ],
+    series,
+    table,
+  };
+}
+
+async function leaveReport(from: Date, to: Date, branchId: string | null): Promise<ReportParts> {
+  const where: Prisma.LeaveRequestWhereInput = {
+    createdAt: { gte: from, lt: to },
+    ...(branchId ? { branchId } : {}),
+  };
+  const [requests, byType, byStatus] = await Promise.all([
+    prisma.leaveRequest.findMany({
+      where,
+      include: { employee: { select: { firstName: true, lastName: true, position: true } } },
+      orderBy: { createdAt: "desc" },
+    }),
+    prisma.leaveRequest.groupBy({ by: ["type"], where, _count: { _all: true }, _sum: { days: true } }),
+    prisma.leaveRequest.groupBy({ by: ["status"], where, _count: { _all: true } }),
+  ]);
+  const total = requests.length;
+  const daysApproved = requests
+    .filter((r) => r.status === "APPROVED")
+    .reduce((s, r) => s + Number(r.days), 0);
+
+  return {
+    summary: [
+      { label: "Requests in period", value: total, kind: "number" as const },
+      { label: "Approved", value: byStatus.find((b) => b.status === "APPROVED")?._count._all ?? 0, kind: "number" as const },
+      { label: "Pending", value: byStatus.find((b) => b.status === "PENDING")?._count._all ?? 0, kind: "number" as const },
+      { label: "Approved days", value: round(daysApproved), kind: "number" as const },
+    ],
+    series: byType.map((t) => ({ label: t.type, value: t._count._all, secondary: round(Number(t._sum.days ?? 0)) })),
+    table: requests.slice(0, 100).map((r) => ({
+      date: r.createdAt.toISOString(),
+      employee: `${r.employee.firstName} ${r.employee.lastName}`,
+      type: r.type,
+      days: Number(r.days),
+      startDate: r.startDate.toISOString(),
+      endDate: r.endDate.toISOString(),
+      status: r.status,
+    })),
+  };
+}
+
+async function payrollReport(from: Date, to: Date, branchId: string | null): Promise<ReportParts> {
+  const where: Prisma.PayrollRunWhereInput = {
+    createdAt: { gte: from, lt: to },
+    ...(branchId ? { branchId } : {}),
+  };
+  const runs = await prisma.payrollRun.findMany({
+    where,
+    include: { _count: { select: { payslips: true } } },
+    orderBy: { periodMonth: "desc" },
+  });
+  const totalNet = runs.reduce((s, r) => s + Number(r.totalNet), 0);
+  const totalGross = runs.reduce((s, r) => s + Number(r.totalGross), 0);
+  const employees = runs.reduce((s, r) => s + r.employeeCount, 0);
+  const paid = runs.filter((r) => r.status === "PAID");
+
+  return {
+    summary: [
+      { label: "Net paid", value: round(totalNet), kind: "currency" as const },
+      { label: "Gross total", value: round(totalGross), kind: "currency" as const },
+      { label: "Employees paid", value: employees, kind: "number" as const },
+      { label: "Runs paid", value: paid.length, kind: "number" as const },
+    ],
+    series: runs.map((r) => ({ label: r.periodMonth, value: round(Number(r.totalNet)) })),
+    table: runs.map((r) => ({
+      period: r.periodMonth,
+      status: r.status,
+      employees: r.employeeCount,
+      gross: round(Number(r.totalGross)),
+      deductions: round(Number(r.totalDeductions)),
+      net: round(Number(r.totalNet)),
+    })),
+  };
+}
+
+async function overtimeReport(from: Date, to: Date, branchId: string | null): Promise<ReportParts> {
+  const where: Prisma.AttendanceRecordWhereInput = {
+    date: { gte: from, lt: to },
+    overtimeMinutes: { gt: 0 },
+    ...(branchId ? { branchId } : {}),
+  };
+  const records = await prisma.attendanceRecord.findMany({
+    where,
+    include: {
+      employee: { select: { firstName: true, lastName: true, position: true, salary: true } },
+    },
+  });
+  const totalHours = records.reduce((s, r) => s + Number(r.overtimeHours ?? 0), 0);
+  const totalMinutes = records.reduce((s, r) => s + (r.overtimeMinutes ?? 0), 0);
+  const estCost = records.reduce((s, r) => {
+    const hourly = Number(r.employee.salary ?? 0) / 26 / 8;
+    return s + Number(r.overtimeHours ?? 0) * hourly * 1.5;
+  }, 0);
+
+  const buckets = buildBuckets(from, to);
+  const series = buckets.map((b) => {
+    const bucketRecords = records.filter((r) => {
+      const t = r.date.getTime();
+      return t >= b.start.getTime() && t < b.end.getTime();
+    });
+    return {
+      label: b.label,
+      value: round(bucketRecords.reduce((s, r) => s + Number(r.overtimeHours ?? 0), 0)),
+    };
+  });
+
+  const byEmployee = new Map<string, { name: string; position: string; hours: number; minutes: number; estCost: number; days: number }>();
+  for (const r of records) {
+    const name = `${r.employee.firstName} ${r.employee.lastName}`;
+    const existing = byEmployee.get(r.employeeId) ?? {
+      name,
+      position: r.employee.position,
+      hours: 0,
+      minutes: 0,
+      estCost: 0,
+      days: 0,
+    };
+    existing.hours += Number(r.overtimeHours ?? 0);
+    existing.minutes += r.overtimeMinutes ?? 0;
+    const hourly = Number(r.employee.salary ?? 0) / 26 / 8;
+    existing.estCost += Number(r.overtimeHours ?? 0) * hourly * 1.5;
+    existing.days += 1;
+    byEmployee.set(r.employeeId, existing);
+  }
+  const table = [...byEmployee.values()]
+    .sort((a, b) => b.hours - a.hours)
+    .map((e) => ({
+      employee: e.name,
+      position: e.position,
+      overtimeDays: e.days,
+      overtimeHours: round(e.hours),
+      overtimeMinutes: e.minutes,
+      estimatedCost: round(e.estCost),
+    }));
+
+  return {
+    summary: [
+      { label: "Overtime hours", value: round(totalHours), kind: "number" as const },
+      { label: "Overtime minutes", value: totalMinutes, kind: "number" as const },
+      { label: "Staff with OT", value: byEmployee.size, kind: "number" as const },
+      { label: "Est. overtime cost", value: round(estCost), kind: "currency" as const },
+    ],
+    series,
+    table,
+  };
+}
+
 /* ------------------------------ Dispatch --------------------------- */
 
 type ReportParts = Pick<ReportResult, "summary" | "series" | "table">;
@@ -543,6 +773,10 @@ const builders: Record<ReportType, (from: Date, to: Date, branchId: string | nul
   SERVICES: servicesReport,
   WASH_JOBS: washJobsReport,
   RECEIPTS: receiptsReport,
+  ATTENDANCE: attendanceReport,
+  LEAVE: leaveReport,
+  PAYROLL: payrollReport,
+  OVERTIME: overtimeReport,
 };
 
 export async function generateReport(query: ReportQuery): Promise<ReportResult> {

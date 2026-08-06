@@ -19,6 +19,11 @@ export const employeeCreateSchema = z.object({
     })
     .optional(),
   notes: z.string().trim().max(500).optional().or(z.literal("")),
+  payday: z.coerce.number().int().min(1, "Pay day must be between 1 and 28").max(28).optional().nullable(),
+  employmentType: z.enum(["FULL_TIME", "PART_TIME", "CONTRACT", "CASUAL"]).optional(),
+  payrollEnabled: z.boolean().optional(),
+  attendanceRequired: z.boolean().optional(),
+  overtimeEligible: z.boolean().optional(),
 });
 
 export const employeeUpdateSchema = employeeCreateSchema.partial();

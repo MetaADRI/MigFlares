@@ -22,10 +22,12 @@ import { RecentActivity } from "@/components/dashboard/recent-activity";
 import { RecentCustomers } from "@/components/dashboard/recent-customers";
 import { RevenueChart } from "@/components/dashboard/revenue-chart";
 import { ServiceDistribution } from "@/components/dashboard/service-distribution";
+import { StaffSnapshotPanel } from "@/components/dashboard/staff-snapshot";
 import { TopServices } from "@/components/dashboard/top-services";
 import { StatCard } from "@/components/common/stat-card";
 import { ErrorState } from "@/components/common/error-state";
 import { useAuth } from "@/hooks/use-auth";
+import { usePermission } from "@/context/permission-context";
 import { dashboardService } from "@/services/dashboard.service";
 import type { ActivityItem, Customer, DashboardInsights, DashboardStats, RevenuePoint, TopService } from "@/types";
 import { formatCurrency } from "@/utils/format";
@@ -82,7 +84,15 @@ function MiniStat({ icon: Icon, label, value, accent }: MiniStatProps) {
 
 export default function DashboardPage() {
   const { user } = useAuth();
+  const { hasPermission } = usePermission();
   const navigate = useNavigate();
+
+  const canSeeEmployees = hasPermission("employees:view");
+  const canSeeInventory = hasPermission("inventory:view");
+  const canSeeExpenses = hasPermission("expenses:view");
+  const canSeeReceipts = hasPermission("receipts:view");
+  const canSeeStaffPanel =
+    hasPermission("attendance:view") || hasPermission("leave:view") || hasPermission("payroll:view");
 
   const [period, setPeriod] = useState<"week" | "month">("week");
   const [stats, setStats] = useState<DashboardStats | null>(null);
@@ -221,12 +231,14 @@ export default function DashboardPage() {
               value={stats.completedWashes}
               accent="bg-emerald-50 text-emerald-600"
             />
-            <MiniStat
-              icon={Users}
-              label="Employees Present"
-              value={stats.employeesPresent}
-              accent="bg-purple-50 text-purple-600"
-            />
+            {canSeeEmployees ? (
+              <MiniStat
+                icon={Users}
+                label="Employees Present"
+                value={stats.employeesPresent}
+                accent="bg-purple-50 text-purple-600"
+              />
+            ) : null}
           </>
         )}
       </div>
@@ -253,16 +265,25 @@ export default function DashboardPage() {
       </div>
 
       {/* Operational snapshot: alerts, expenses, receipts */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <InventoryAlerts alerts={insights?.inventoryAlerts ?? []} loading={loading} />
-        <ExpenseSummary summary={insights?.expenseSummary ?? null} loading={loading} />
-        <LatestReceipts receipts={insights?.latestReceipts ?? []} loading={loading} />
-      </div>
+      {canSeeInventory || canSeeExpenses || canSeeReceipts ? (
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+          {canSeeInventory ? <InventoryAlerts alerts={insights?.inventoryAlerts ?? []} loading={loading} /> : null}
+          {canSeeExpenses ? <ExpenseSummary summary={insights?.expenseSummary ?? null} loading={loading} /> : null}
+          {canSeeReceipts ? <LatestReceipts receipts={insights?.latestReceipts ?? []} loading={loading} /> : null}
+        </div>
+      ) : null}
+
+      {/* Staff & payroll snapshot */}
+      {canSeeStaffPanel ? <StaffSnapshotPanel /> : null}
 
       {/* Service distribution + active employees */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <ServiceDistribution services={insights?.serviceDistribution ?? []} loading={loading} />
-        <ActiveEmployees employees={insights?.activeEmployees ?? []} loading={loading} />
+        <div className={canSeeEmployees ? "" : "lg:col-span-2"}>
+          <ServiceDistribution services={insights?.serviceDistribution ?? []} loading={loading} />
+        </div>
+        {canSeeEmployees ? (
+          <ActiveEmployees employees={insights?.activeEmployees ?? []} loading={loading} />
+        ) : null}
       </div>
 
       {/* Recent customers */}

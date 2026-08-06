@@ -3,12 +3,15 @@ import {
   BarChart3,
   Bell,
   Brush,
+  CalendarCheck,
+  CalendarClock,
   CalendarDays,
   Car,
   ClipboardList,
   Droplets,
   Gauge,
   Hand,
+  HandCoins,
   LayoutDashboard,
   LifeBuoy,
   type LucideIcon,
@@ -30,15 +33,21 @@ import {
   Zap,
 } from "lucide-react";
 import type {
+  AttendanceStatus,
   BookingStatus,
   CustomerStatus,
+  EmploymentType,
   ExpenseCategory,
   ExpenseStatus,
   InventoryCategory,
+  LeaveStatus,
+  LeaveType,
   MovementType,
   NotificationType,
   PaymentMethod,
   PaymentStatus,
+  PayrollRunStatus,
+  PayslipStatus,
   ReportPeriod,
   ReportType,
   RoleName,
@@ -83,6 +92,8 @@ export const NAV_GROUPS: NavGroup[] = [
       { label: "Vehicles", path: "/vehicles", icon: Car },
       { label: "Services", path: "/services", icon: Sparkles },
       { label: "Employees", path: "/employees", icon: UserRound },
+      { label: "Attendance", path: "/attendance", icon: CalendarCheck },
+      { label: "Leave", path: "/leave", icon: CalendarClock },
     ],
   },
   {
@@ -90,6 +101,7 @@ export const NAV_GROUPS: NavGroup[] = [
     items: [
       { label: "Inventory", path: "/inventory", icon: Package },
       { label: "Expenses", path: "/expenses", icon: Wallet },
+      { label: "Payroll", path: "/payroll", icon: HandCoins },
       { label: "Reports", path: "/reports", icon: BarChart3 },
       { label: "Analytics", path: "/analytics", icon: PieChart },
       { label: "Receipts", path: "/receipts", icon: ReceiptText },
@@ -125,6 +137,9 @@ export const PATH_PERMISSIONS: Record<string, string> = {
   "/vehicles": "vehicles:view",
   "/services": "services:view",
   "/employees": "employees:view",
+  "/attendance": "attendance:view",
+  "/leave": "leave:view",
+  "/payroll": "payroll:view",
   "/inventory": "inventory:view",
   "/expenses": "expenses:view",
   "/reports": "reports:view",
@@ -452,6 +467,134 @@ export const EMPLOYEE_POSITIONS = [
   "Manager",
 ] as const;
 
+export const EMPLOYMENT_TYPES: { value: EmploymentType; label: string }[] = [
+  { value: "FULL_TIME", label: "Full time" },
+  { value: "PART_TIME", label: "Part time" },
+  { value: "CONTRACT", label: "Contract" },
+  { value: "CASUAL", label: "Casual" },
+];
+
+export const EMPLOYMENT_TYPE_LABEL: Record<EmploymentType, string> = Object.fromEntries(
+  EMPLOYMENT_TYPES.map((t) => [t.value, t.label]),
+) as Record<EmploymentType, string>;
+
+/* ------------------------ Attendance / Leave / Payroll ------------------------ */
+
+export const ATTENDANCE_STATUS_META: Record<
+  AttendanceStatus,
+  { label: string; className: string; dot: string }
+> = {
+  PRESENT: {
+    label: "Present",
+    className: "bg-emerald-50 text-emerald-700 border-emerald-200",
+    dot: "bg-emerald-500",
+  },
+  LATE: {
+    label: "Late",
+    className: "bg-amber-50 text-amber-700 border-amber-200",
+    dot: "bg-amber-500",
+  },
+  ABSENT: {
+    label: "Absent",
+    className: "bg-red-50 text-red-700 border-red-200",
+    dot: "bg-red-500",
+  },
+  ON_LEAVE: {
+    label: "On leave",
+    className: "bg-sky-50 text-sky-700 border-sky-200",
+    dot: "bg-sky-500",
+  },
+  HOLIDAY: {
+    label: "Holiday",
+    className: "bg-purple-50 text-purple-700 border-purple-200",
+    dot: "bg-purple-500",
+  },
+};
+
+export const LEAVE_TYPES: { value: LeaveType; label: string }[] = [
+  { value: "ANNUAL", label: "Annual" },
+  { value: "SICK", label: "Sick" },
+  { value: "UNPAID", label: "Unpaid" },
+  { value: "OTHER", label: "Other" },
+];
+
+export const LEAVE_TYPE_LABEL: Record<LeaveType, string> = Object.fromEntries(
+  LEAVE_TYPES.map((t) => [t.value, t.label]),
+) as Record<LeaveType, string>;
+
+export const LEAVE_STATUS_META: Record<
+  LeaveStatus,
+  { label: string; className: string; dot: string }
+> = {
+  PENDING: {
+    label: "Pending",
+    className: "bg-amber-50 text-amber-700 border-amber-200",
+    dot: "bg-amber-500",
+  },
+  APPROVED: {
+    label: "Approved",
+    className: "bg-emerald-50 text-emerald-700 border-emerald-200",
+    dot: "bg-emerald-500",
+  },
+  REJECTED: {
+    label: "Rejected",
+    className: "bg-red-50 text-red-700 border-red-200",
+    dot: "bg-red-500",
+  },
+  CANCELLED: {
+    label: "Cancelled",
+    className: "bg-zinc-100 text-zinc-600 border-zinc-200",
+    dot: "bg-zinc-400",
+  },
+};
+
+export const PAYROLL_RUN_STATUS_META: Record<
+  PayrollRunStatus,
+  { label: string; className: string; dot: string }
+> = {
+  DRAFT: {
+    label: "Draft",
+    className: "bg-amber-50 text-amber-700 border-amber-200",
+    dot: "bg-amber-500",
+  },
+  PROCESSED: {
+    label: "Processed",
+    className: "bg-sky-50 text-sky-700 border-sky-200",
+    dot: "bg-sky-500",
+  },
+  PAID: {
+    label: "Paid",
+    className: "bg-emerald-50 text-emerald-700 border-emerald-200",
+    dot: "bg-emerald-500",
+  },
+};
+
+export const PAYSLIP_STATUS_META: Record<PayslipStatus, { label: string; className: string; dot: string }> = {
+  DRAFT: {
+    label: "Draft",
+    className: "bg-amber-50 text-amber-700 border-amber-200",
+    dot: "bg-amber-500",
+  },
+  PAID: {
+    label: "Paid",
+    className: "bg-emerald-50 text-emerald-700 border-emerald-200",
+    dot: "bg-emerald-500",
+  },
+};
+
+export const ATTENDANCE_MONTHS = (() => {
+  const months: { value: string; label: string }[] = [];
+  const now = new Date();
+  for (let i = 0; i < 6; i += 1) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    months.push({
+      value: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`,
+      label: d.toLocaleDateString("en-ZM", { month: "long", year: "numeric" }),
+    });
+  }
+  return months;
+})();
+
 /* ------------------------- Permissions & RBAC ---------------------- */
 
 /** Canonical permission catalog — mirrors the backend seed. */
@@ -511,6 +654,30 @@ export const PERMISSION_CATALOG: {
     permissions: [
       { key: "employees:view", name: "View employees", description: "Browse the staff roster" },
       { key: "employees:manage", name: "Manage employees", description: "Add, edit and suspend staff" },
+    ],
+  },
+  {
+    module: "ATTENDANCE",
+    moduleLabel: "Attendance",
+    permissions: [
+      { key: "attendance:view", name: "View attendance", description: "Browse attendance records and today's board" },
+      { key: "attendance:manage", name: "Manage attendance", description: "Correct attendance records" },
+    ],
+  },
+  {
+    module: "LEAVE",
+    moduleLabel: "Leave",
+    permissions: [
+      { key: "leave:view", name: "View leave", description: "Browse leave requests and balances" },
+      { key: "leave:manage", name: "Manage leave", description: "Approve or reject leave requests" },
+    ],
+  },
+  {
+    module: "PAYROLL",
+    moduleLabel: "Payroll",
+    permissions: [
+      { key: "payroll:view", name: "View payroll", description: "Browse runs, payslips and the rule" },
+      { key: "payroll:manage", name: "Manage payroll", description: "Generate runs, adjust payslips and mark paid" },
     ],
   },
   {
@@ -624,6 +791,9 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<RoleName, string[]> = {
     "bookings:view", "bookings:manage",
     "services:view", "services:manage",
     "employees:view", "employees:manage",
+    "attendance:view", "attendance:manage",
+    "leave:view", "leave:manage",
+    "payroll:view", "payroll:manage",
     "inventory:view", "inventory:manage",
     "expenses:view", "expenses:manage", "expenses:approve",
     "receipts:view", "receipts:manage",
@@ -637,6 +807,7 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<RoleName, string[]> = {
     "wash-jobs:view", "wash-jobs:manage",
     "bookings:view", "bookings:manage",
     "services:view",
+    "attendance:view", "leave:view", "payroll:view",
     "receipts:view", "receipts:manage",
     "notifications:view", "support:view",
   ],
@@ -647,6 +818,7 @@ export const ROLE_DEFAULT_PERMISSIONS: Record<RoleName, string[]> = {
     "wash-jobs:view", "wash-jobs:manage",
     "bookings:view", "bookings:manage",
     "services:view",
+    "attendance:view", "leave:view", "payroll:view",
     "notifications:view", "support:view",
   ],
 };
@@ -704,6 +876,10 @@ export const REPORT_TYPES: {
   { value: "SERVICES", label: "Services", description: "Popularity and revenue per service", chart: "pie" },
   { value: "WASH_JOBS", label: "Wash Jobs", description: "Volume, statuses and completion", chart: "line" },
   { value: "RECEIPTS", label: "Receipts", description: "Issued receipts and values", chart: "line" },
+  { value: "ATTENDANCE", label: "Attendance", description: "Staff presence, lateness and hours", chart: "bar" },
+  { value: "LEAVE", label: "Leave", description: "Requests by type and status", chart: "bar" },
+  { value: "PAYROLL", label: "Payroll", description: "Runs, payslips and payroll costs", chart: "bar" },
+  { value: "OVERTIME", label: "Overtime", description: "Overtime hours and cost by staff", chart: "bar" },
 ];
 
 export const REPORT_PERIODS: { value: ReportPeriod; label: string }[] = [

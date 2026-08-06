@@ -33,3 +33,8 @@ export const insights = asyncHandler(async (req: Request, res: Response) => {
   const result = await dashboardService.getInsights(req.user?.branchId ?? null);
   res.json(ok(result));
 });
+
+export const staff = asyncHandler(async (req: Request, res: Response) => {
+  const result = await dashboardService.getStaffSnapshot(req.user?.branchId ?? null);
+  res.json(ok(result));
+});

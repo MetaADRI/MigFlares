@@ -1,9 +1,22 @@
-import type { ActivityItem, Customer, DashboardInsights, DashboardStats, RevenuePoint, TopService } from "@/types";
+import type {
+  ActivityItem,
+  Customer,
+  DashboardInsights,
+  DashboardStats,
+  RevenuePoint,
+  StaffSnapshot,
+  TopService,
+} from "@/types";
 import { api } from "@/services/api";
 
 export const dashboardService = {
   async getStats(): Promise<DashboardStats> {
     const { data } = await api.get<DashboardStats>("/dashboard/stats");
+    return data;
+  },
+
+  async getStaffSnapshot(): Promise<StaffSnapshot> {
+    const { data } = await api.get<StaffSnapshot>("/dashboard/staff");
     return data;
   },
 

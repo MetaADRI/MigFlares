@@ -1,15 +1,20 @@
 import { z } from "zod";
 import {
   EXPENSE_CATEGORIES,
+  EMPLOYMENT_TYPES,
   INVENTORY_CATEGORIES,
+  LEAVE_TYPES,
   PAYMENT_METHODS,
   SERVICE_CATEGORIES,
   VEHICLE_TYPES,
 } from "@/constants";
 import type {
+  AttendanceStatus,
   BookingStatus,
+  EmploymentType,
   ExpenseCategory,
   InventoryCategory,
+  LeaveType,
   MovementType,
   PaymentMethod,
   ServiceCategory,
@@ -158,8 +163,74 @@ export const employeeSchema = z.object({
   emergencyPhone: z.string().trim().max(30).or(z.literal("")),
   emergencyRelation: z.string().trim().max(50).or(z.literal("")),
   notes: longTextOrEmpty,
+  payday: z.coerce.number().int("Whole day only").min(1, "Between 1 and 28").max(28, "Between 1 and 28"),
+  employmentType: z.enum(
+    EMPLOYMENT_TYPES.map((t) => t.value) as [EmploymentType, ...EmploymentType[]],
+  ),
+  payrollEnabled: z.boolean(),
+  attendanceRequired: z.boolean(),
+  overtimeEligible: z.boolean(),
 });
 export type EmployeeInput = z.infer<typeof employeeSchema>;
+
+/* ---------------------- Attendance / Leave / Payroll ---------------------- */
+
+export const attendanceCorrectionSchema = z.object({
+  status: z.enum(["PRESENT", "LATE", "ABSENT", "ON_LEAVE", "HOLIDAY"] as [
+    AttendanceStatus,
+    ...AttendanceStatus[],
+  ]),
+  clockInAt: z.string().optional().nullable(),
+  clockOutAt: z.string().optional().nullable(),
+  notes: z.string().trim().max(300, "Too long").or(z.literal("")),
+});
+export type AttendanceCorrectionInput = z.infer<typeof attendanceCorrectionSchema>;
+
+export const leaveRequestSchema = z.object({
+  type: z.enum(LEAVE_TYPES.map((t) => t.value) as [LeaveType, ...LeaveType[]]),
+  startDate: z.string().min(1, "Start date is required"),
+  endDate: z.string().min(1, "End date is required"),
+  reason: z.string().trim().max(500, "Too long").or(z.literal("")),
+});
+export type LeaveRequestInput = z.infer<typeof leaveRequestSchema>;
+
+export const payrollRuleSchema = z.object({
+  name: z.string().trim().min(2, "Name is required"),
+  startTime: z.string().regex(/^\d{2}:\d{2}$/, "Use HH:MM (e.g. 08:00)"),
+  graceMinutes: z.coerce.number().int().min(0).max(120),
+  standardMinutesPerDay: z.coerce.number().int().min(60).max(720),
+  overtimeRate: z.coerce.number().min(1).max(3),
+  dailyOvertimeThresholdMin: z.coerce.number().int().min(360).max(960),
+  defaultPayday: z.coerce.number().int().min(1).max(28),
+  bonusEnabled: z.boolean(),
+  overtimeEnabled: z.boolean(),
+  allowancesEnabled: z.boolean(),
+  deductionLoan: z.coerce.number().min(0),
+  deductionDamages: z.coerce.number().min(0),
+  deductionUniform: z.coerce.number().min(0),
+  deductionTransport: z.coerce.number().min(0),
+  deductionMeals: z.coerce.number().min(0),
+  deductionAdvances: z.coerce.number().min(0),
+  deductionOther: z.coerce.number().min(0),
+  notes: z.string().trim().max(300).or(z.literal("")),
+});
+export type PayrollRuleInput = z.infer<typeof payrollRuleSchema>;
+
+export const payslipAdjustSchema = z.object({
+  overtimeHours: z.coerce.number().min(0).optional(),
+  overtimeAmount: z.coerce.number().min(0).optional(),
+  bonusAmount: z.coerce.number().min(0).optional(),
+  allowancesAmount: z.coerce.number().min(0).optional(),
+  deductionLoan: z.coerce.number().min(0).optional(),
+  deductionDamages: z.coerce.number().min(0).optional(),
+  deductionUniform: z.coerce.number().min(0).optional(),
+  deductionTransport: z.coerce.number().min(0).optional(),
+  deductionMeals: z.coerce.number().min(0).optional(),
+  deductionAdvances: z.coerce.number().min(0).optional(),
+  deductionOther: z.coerce.number().min(0).optional(),
+  notes: z.string().trim().max(300).or(z.literal("")),
+});
+export type PayslipAdjustInput = z.infer<typeof payslipAdjustSchema>;
 
 /* ---------------------------- Inventory ---------------------------- */
 

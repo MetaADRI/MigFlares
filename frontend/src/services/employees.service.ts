@@ -20,6 +20,11 @@ export interface EmployeeInput {
   salary?: number | null;
   emergencyContact?: EmergencyContactInput | null;
   notes?: string | null;
+  payday?: number | null;
+  employmentType?: string;
+  payrollEnabled?: boolean;
+  attendanceRequired?: boolean;
+  overtimeEligible?: boolean;
 }
 
 export interface SalaryPaymentInput {

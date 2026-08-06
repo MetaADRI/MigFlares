@@ -12,5 +12,6 @@ router.get("/activities", dashboardController.activities);
 router.get("/top-services", dashboardController.topServices);
 router.get("/recent-customers", dashboardController.recentCustomers);
 router.get("/insights", dashboardController.insights);
+router.get("/staff", dashboardController.staff);
 
 export default router;

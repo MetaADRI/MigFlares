@@ -18,6 +18,9 @@ import reportRoutes from "./report.routes.js";
 import analyticsRoutes from "./analytics.routes.js";
 import roleRoutes from "./role.routes.js";
 import bookingRoutes from "./booking.routes.js";
+import attendanceRoutes from "./attendance.routes.js";
+import leaveRoutes from "./leave.routes.js";
+import payrollRoutes from "./payroll.routes.js";
 
 const apiRouter = Router();
 
@@ -40,5 +43,8 @@ apiRouter.use("/reports", reportRoutes);
 apiRouter.use("/analytics", analyticsRoutes);
 apiRouter.use("/roles", roleRoutes);
 apiRouter.use("/bookings", bookingRoutes);
+apiRouter.use("/attendance", attendanceRoutes);
+apiRouter.use("/leave", leaveRoutes);
+apiRouter.use("/payroll", payrollRoutes);
 
 export default apiRouter;

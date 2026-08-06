@@ -1,8 +1,12 @@
 import { Router } from "express";
 import * as employeeController from "../controllers/employee.controller.js";
 import { requireAuth } from "../middleware/auth.middleware.js";
+import { requirePermission } from "../middleware/permission.middleware.js";
 import { validate } from "../middleware/validate.middleware.js";
 import { idParamsSchema } from "../validation/common.validation.js";
+import { attendanceQuerySchema } from "../validation/attendance.validation.js";
+import { leaveCreateSchema, leaveIdParamsSchema, leaveQuerySchema } from "../validation/leave.validation.js";
+import { payslipQuerySchema } from "../validation/payroll.validation.js";
 import {
   clockInOutSchema,
   employeeCreateSchema,
@@ -16,22 +20,36 @@ const router = Router();
 
 router.use(requireAuth);
 
-router.get("/", validate(employeeQuerySchema, "query"), employeeController.list);
-router.post("/", validate(employeeCreateSchema), employeeController.create);
-router.get("/:id/stats", validate(idParamsSchema, "params"), employeeController.stats);
-router.get("/:id/salary-history", validate(idParamsSchema, "params"), employeeController.salaryHistory);
+/* Self-service — resolved from the logged-in user, no role gate needed. */
+router.get("/me/attendance", validate(attendanceQuerySchema, "query"), employeeController.myAttendance);
+router.get("/me/leave", validate(leaveQuerySchema, "query"), employeeController.myLeave);
+router.get("/me/leave/balances", employeeController.myLeaveBalances);
+router.post("/me/leave", validate(leaveCreateSchema), employeeController.myCreateLeave);
+router.post(
+  "/me/leave/:id/cancel",
+  validate(leaveIdParamsSchema, "params"),
+  employeeController.myCancelLeave,
+);
+router.get("/me/payslips", validate(payslipQuerySchema, "query"), employeeController.myPayslips);
+router.get("/me/payroll", employeeController.myPayrollSummary);
+
+router.get("/", requirePermission("employees:view"), validate(employeeQuerySchema, "query"), employeeController.list);
+router.post("/", requirePermission("employees:manage"), validate(employeeCreateSchema), employeeController.create);
+router.get("/:id/stats", requirePermission("employees:view"), validate(idParamsSchema, "params"), employeeController.stats);
+router.get("/:id/salary-history", requirePermission("employees:view"), validate(idParamsSchema, "params"), employeeController.salaryHistory);
 router.post(
   "/:id/salary-payments",
+  requirePermission("employees:manage"),
   validate(idParamsSchema, "params"),
   validate(salaryPaymentSchema),
   employeeController.recordSalary,
 );
-router.get("/:id/time-entries", validate(idParamsSchema, "params"), employeeController.timeEntries);
-router.post("/:id/clock-in", validate(idParamsSchema, "params"), validate(clockInOutSchema), employeeController.clockIn);
-router.post("/:id/clock-out", validate(idParamsSchema, "params"), validate(clockInOutSchema), employeeController.clockOut);
-router.get("/:id", validate(idParamsSchema, "params"), employeeController.get);
-router.patch("/:id", validate(idParamsSchema, "params"), validate(employeeUpdateSchema), employeeController.update);
-router.patch("/:id/suspend", validate(idParamsSchema, "params"), validate(employeeSuspendSchema), employeeController.suspend);
-router.delete("/:id", validate(idParamsSchema, "params"), employeeController.remove);
+router.get("/:id/time-entries", requirePermission("employees:view"), validate(idParamsSchema, "params"), employeeController.timeEntries);
+router.post("/:id/clock-in", requirePermission("employees:manage"), validate(idParamsSchema, "params"), validate(clockInOutSchema), employeeController.clockIn);
+router.post("/:id/clock-out", requirePermission("employees:manage"), validate(idParamsSchema, "params"), validate(clockInOutSchema), employeeController.clockOut);
+router.get("/:id", requirePermission("employees:view"), validate(idParamsSchema, "params"), employeeController.get);
+router.patch("/:id", requirePermission("employees:manage"), validate(idParamsSchema, "params"), validate(employeeUpdateSchema), employeeController.update);
+router.patch("/:id/suspend", requirePermission("employees:manage"), validate(idParamsSchema, "params"), validate(employeeSuspendSchema), employeeController.suspend);
+router.delete("/:id", requirePermission("employees:manage"), validate(idParamsSchema, "params"), employeeController.remove);
 
 export default router;

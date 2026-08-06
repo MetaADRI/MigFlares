@@ -14,6 +14,9 @@ const WashJobsPage = lazy(() => import("@/pages/wash-jobs/wash-jobs-page"));
 const BookingsPage = lazy(() => import("@/pages/bookings/bookings-page"));
 const ServicesPage = lazy(() => import("@/pages/services/services-page"));
 const EmployeesPage = lazy(() => import("@/pages/employees/employees-page"));
+const AttendancePage = lazy(() => import("@/pages/attendance/attendance-page"));
+const LeavePage = lazy(() => import("@/pages/leave/leave-page"));
+const PayrollPage = lazy(() => import("@/pages/payroll/payroll-page"));
 const InventoryPage = lazy(() => import("@/pages/inventory/inventory-page"));
 const ExpensesPage = lazy(() => import("@/pages/expenses/expenses-page"));
 const ReportsPage = lazy(() => import("@/pages/reports/reports-page"));
@@ -79,6 +82,9 @@ export function AppRoutes() {
           <Route path="/vehicles" element={<GuardedRoute><VehiclesPage /></GuardedRoute>} />
           <Route path="/services" element={<GuardedRoute><ServicesPage /></GuardedRoute>} />
           <Route path="/employees" element={<GuardedRoute><EmployeesPage /></GuardedRoute>} />
+          <Route path="/attendance" element={<GuardedRoute><AttendancePage /></GuardedRoute>} />
+          <Route path="/leave" element={<GuardedRoute><LeavePage /></GuardedRoute>} />
+          <Route path="/payroll" element={<GuardedRoute><PayrollPage /></GuardedRoute>} />
           <Route path="/inventory" element={<GuardedRoute><InventoryPage /></GuardedRoute>} />
           <Route path="/expenses" element={<GuardedRoute><ExpensesPage /></GuardedRoute>} />
           <Route path="/reports" element={<GuardedRoute><ReportsPage /></GuardedRoute>} />

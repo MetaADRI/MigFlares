@@ -25,6 +25,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { PhotoUpload } from "@/components/common/photo-upload";
 import { PAYMENT_METHODS, WASH_EXTRAS, WASH_STATUS_META } from "@/constants";
 import { washJobsService } from "@/services/wash-jobs.service";
+import { usePermission } from "@/context/permission-context";
 import type { Customer, Employee, Service, Vehicle, WashExtra, WashJob } from "@/types";
 import { cn } from "@/utils/cn";
 import { formatCurrency } from "@/utils/format";
@@ -49,6 +50,9 @@ function Field({ label, required, error, children }: { label: string; required?:
 }
 
 export function WashJobModal({ open, onOpenChange, onCreated }: WashJobModalProps) {
+  const { hasPermission } = usePermission();
+  const canAssignEmployees = hasPermission("employees:view");
+
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [services, setServices] = useState<Service[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -89,25 +93,28 @@ export function WashJobModal({ open, onOpenChange, onCreated }: WashJobModalProp
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
-    Promise.all([
-      washJobsService.getCustomers(),
-      washJobsService.getServices(),
-      washJobsService.getEmployees(),
-    ])
-      .then(([c, s, e]) => {
-        if (!cancelled) {
-          setCustomers(c);
-          setServices(s);
-          setEmployees(e);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) toast.error("Failed to load form options");
-      });
+    const requests: Promise<void>[] = [
+      washJobsService.getCustomers().then((c) => {
+        if (!cancelled) setCustomers(c);
+      }),
+      washJobsService.getServices().then((s) => {
+        if (!cancelled) setServices(s);
+      }),
+    ];
+    if (canAssignEmployees) {
+      requests.push(
+        washJobsService.getEmployees().then((e) => {
+          if (!cancelled) setEmployees(e);
+        }),
+      );
+    }
+    Promise.all(requests).catch(() => {
+      if (!cancelled) toast.error("Failed to load form options");
+    });
     return () => {
       cancelled = true;
     };
-  }, [open]);
+  }, [open, canAssignEmployees]);
 
   // Reset form each time it opens.
   useEffect(() => {
@@ -328,24 +335,26 @@ export function WashJobModal({ open, onOpenChange, onCreated }: WashJobModalProp
             <Field label="Discount (K)" error={errors.discount?.message}>
               <Input type="number" min={0} placeholder="0" {...register("discount")} />
             </Field>
-            <Field label="Assigned employee">
-              <Select
-                value={watch("employeeId")}
-                onValueChange={(v) => setValue("employeeId", v)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Unassigned" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="">Unassigned</SelectItem>
-                  {employees.map((e) => (
-                    <SelectItem key={e.id} value={e.id}>
-                      {e.name} · {e.position}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </Field>
+            {canAssignEmployees ? (
+              <Field label="Assigned employee">
+                <Select
+                  value={watch("employeeId")}
+                  onValueChange={(v) => setValue("employeeId", v)}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Unassigned" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="">Unassigned</SelectItem>
+                    {employees.map((e) => (
+                      <SelectItem key={e.id} value={e.id}>
+                        {e.name} · {e.position}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </Field>
+            ) : null}
             <Field label="Status" required error={errors.status?.message}>
               <Select
                 value={watch("status")}

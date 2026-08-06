@@ -14,10 +14,11 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { employeesService } from "@/services/employees.service";
 import { uploadImage } from "@/services/upload.service";
-import { EMPLOYEE_POSITIONS } from "@/constants";
+import { EMPLOYEE_POSITIONS, EMPLOYMENT_TYPES } from "@/constants";
 import type { Employee } from "@/types";
 import { cn } from "@/utils/cn";
 import { initials } from "@/utils/format";
@@ -59,6 +60,8 @@ export function EmployeeModal({ open, onOpenChange, employee, onSaved }: Employe
     register,
     reset,
     handleSubmit,
+    watch,
+    setValue,
     formState: { errors },
   } = useForm<EmployeeInput>({
     resolver: zodResolver(employeeSchema),
@@ -75,6 +78,11 @@ export function EmployeeModal({ open, onOpenChange, employee, onSaved }: Employe
       emergencyPhone: "",
       emergencyRelation: "",
       notes: "",
+      payday: 25,
+      employmentType: "FULL_TIME",
+      payrollEnabled: true,
+      attendanceRequired: true,
+      overtimeEligible: true,
     },
   });
 
@@ -94,6 +102,11 @@ export function EmployeeModal({ open, onOpenChange, employee, onSaved }: Employe
         emergencyPhone: employee?.emergencyContact?.phone ?? "",
         emergencyRelation: employee?.emergencyContact?.relation ?? "",
         notes: employee?.notes ?? "",
+        payday: employee?.payday ?? 25,
+        employmentType: employee?.employmentType ?? "FULL_TIME",
+        payrollEnabled: employee?.payrollEnabled ?? true,
+        attendanceRequired: employee?.attendanceRequired ?? true,
+        overtimeEligible: employee?.overtimeEligible ?? true,
       });
     }
   }, [open, employee, reset]);
@@ -120,6 +133,11 @@ export function EmployeeModal({ open, onOpenChange, employee, onSaved }: Employe
               }
             : null,
         notes: values.notes || null,
+        payday: values.payday ?? null,
+        employmentType: values.employmentType,
+        payrollEnabled: values.payrollEnabled,
+        attendanceRequired: values.attendanceRequired,
+        overtimeEligible: values.overtimeEligible,
       };
       const saved = isEdit
         ? await employeesService.update(employee!.id, payload)
@@ -269,6 +287,52 @@ export function EmployeeModal({ open, onOpenChange, employee, onSaved }: Employe
               <Field label="Relation" error={errors.emergencyRelation?.message}>
                 <Input placeholder="e.g. Wife" {...register("emergencyRelation")} />
               </Field>
+            </div>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label="Employment type" error={errors.employmentType?.message}>
+              <select
+                {...register("employmentType")}
+                className={cn(
+                  "flex h-10 w-full rounded-xl border border-border/70 bg-background px-3 text-sm shadow-sm outline-none transition-colors focus:border-primary/60 focus:ring-2 focus:ring-primary/20",
+                )}
+              >
+                {EMPLOYMENT_TYPES.map((t) => (
+                  <option key={t.value} value={t.value}>
+                    {t.label}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Payday (day of month)" error={errors.payday?.message}>
+              <Input type="number" min={1} max={28} placeholder="25" {...register("payday")} />
+            </Field>
+          </div>
+
+          <div className="space-y-3 rounded-xl border border-border/70 bg-muted/30 p-4">
+            <div>
+              <Label>Payroll &amp; attendance</Label>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                Controls how this employee appears in payroll runs and attendance.
+              </p>
+            </div>
+            <div className="grid gap-3 sm:grid-cols-3">
+              {(
+                [
+                  ["payrollEnabled", "Include in payroll"],
+                  ["attendanceRequired", "Track attendance"],
+                  ["overtimeEligible", "Eligible for OT"],
+                ] as const
+              ).map(([key, label]) => (
+                <div key={key} className="flex items-center justify-between gap-3 rounded-lg border border-border/60 bg-background px-3 py-2.5">
+                  <Label className="text-sm font-medium">{label}</Label>
+                  <Switch
+                    checked={watch(key)}
+                    onCheckedChange={(checked) => setValue(key, checked)}
+                  />
+                </div>
+              ))}
             </div>
           </div>
 

@@ -52,6 +52,20 @@ export type ExpenseCategory =
 
 export type ExpenseStatus = "PENDING" | "APPROVED" | "REJECTED";
 
+export type EmploymentType = "FULL_TIME" | "PART_TIME" | "CONTRACT" | "CASUAL";
+
+export type AttendanceStatus = "PRESENT" | "LATE" | "ABSENT" | "ON_LEAVE" | "HOLIDAY";
+
+export type AttendanceSource = "LOGIN" | "CLOCK_BUTTON" | "MANUAL";
+
+export type LeaveType = "ANNUAL" | "SICK" | "UNPAID" | "OTHER";
+
+export type LeaveStatus = "PENDING" | "APPROVED" | "REJECTED" | "CANCELLED";
+
+export type PayrollRunStatus = "DRAFT" | "PROCESSED" | "PAID";
+
+export type PayslipStatus = "DRAFT" | "PAID";
+
 export interface User {
   id: string;
   username: string;
@@ -227,9 +241,21 @@ export interface Employee {
   emergencyContact: EmergencyContact | null;
   notes: string | null;
   isActive: boolean;
+  payday: number | null;
+  employmentType: EmploymentType;
+  payrollEnabled: boolean;
+  attendanceRequired: boolean;
+  overtimeEligible: boolean;
   washesToday: number;
   totalWashes: number;
   expensesCount: number;
+}
+
+export interface EmployeeRef {
+  id: string;
+  firstName: string;
+  lastName: string;
+  position: string;
 }
 
 export interface EmployeeStats {
@@ -267,6 +293,160 @@ export interface TimeEntry {
 export interface TimeEntriesResult {
   current: TimeEntry | null;
   entries: TimeEntry[];
+}
+
+/* ------------------------ Attendance / Leave / Payroll ------------------------ */
+
+export interface AttendanceRecord {
+  id: string;
+  date: string;
+  status: AttendanceStatus;
+  clockInAt: string | null;
+  clockOutAt: string | null;
+  hoursWorked: number | null;
+  overtimeHours: number | null;
+  overtimeMinutes: number | null;
+  source: AttendanceSource;
+  timeEntryId: string | null;
+  notes: string | null;
+  employee?: EmployeeRef;
+}
+
+export interface AttendanceTodaySummary {
+  date: string;
+  present: number;
+  late: number;
+  absent: number;
+  onLeave: number;
+  holiday: number;
+  total: number;
+  clockedInNow: number;
+}
+
+export interface LeaveRequest {
+  id: string;
+  type: LeaveType;
+  startDate: string;
+  endDate: string;
+  days: number;
+  status: LeaveStatus;
+  reason: string | null;
+  reviewedAt: string | null;
+  reviewNote: string | null;
+  createdAt: string;
+  employee?: EmployeeRef;
+}
+
+export interface LeaveBalances {
+  annual: { entitlement: number; used: number; remaining: number };
+  sickUsed: number;
+  unpaidUsed: number;
+  otherUsed: number;
+  pendingDays: number;
+}
+
+export interface PayrollDeductions {
+  loan: number;
+  damages: number;
+  uniform: number;
+  transport: number;
+  meals: number;
+  advances: number;
+  other: number;
+}
+
+export interface PayrollRule {
+  name: string;
+  startTime: string;
+  graceMinutes: number;
+  standardMinutesPerDay: number;
+  overtimeRate: number;
+  dailyOvertimeThresholdMin: number;
+  defaultPayday: number;
+  bonusEnabled: boolean;
+  overtimeEnabled: boolean;
+  allowancesEnabled: boolean;
+  deductions: PayrollDeductions;
+  notes: string | null;
+}
+
+export interface Payslip {
+  id: string;
+  runId: string;
+  employee?: EmployeeRef;
+  periodMonth: string;
+  runStatus: PayrollRunStatus;
+  baseSalary: number;
+  overtimeHours: number;
+  overtimeAmount: number;
+  bonusAmount: number;
+  allowancesAmount: number;
+  grossAmount: number;
+  deductions: PayrollDeductions;
+  totalDeductions: number;
+  netAmount: number;
+  workedDays: number;
+  absentDays: number;
+  leaveDays: number;
+  status: PayslipStatus;
+  paidAt: string | null;
+  paymentMethod: PaymentMethod | null;
+  notes: string | null;
+}
+
+export interface PayrollRun {
+  id: string;
+  periodMonth: string;
+  status: PayrollRunStatus;
+  totalGross: number;
+  totalDeductions: number;
+  totalNet: number;
+  employeeCount: number;
+  payslipCount?: number;
+  ruleSnapshot: Record<string, unknown> | null;
+  processedAt: string | null;
+  paidAt: string | null;
+  notes: string | null;
+  createdAt: string;
+  payslips?: Payslip[];
+}
+
+export interface PayrollSummary {
+  monthlySalary: number;
+  payday: number;
+  nextPayday: string;
+  lastPaid: { periodMonth: string; amount: number; paidAt: string | null } | null;
+  ytdPaid: number;
+  payslipCount: number;
+}
+
+export interface PaydayReminder {
+  payday: number;
+  dueToday: boolean;
+  previousMonthUnpaid: boolean;
+  currentMonthProcessed: boolean;
+  message: string | null;
+}
+
+export interface StaffSnapshot {
+  attendance: AttendanceTodaySummary;
+  pendingLeave: number;
+  payday: PaydayReminder;
+  currentRun: {
+    id: string;
+    periodMonth: string;
+    status: PayrollRunStatus;
+    payslipCount: number;
+    employeeCount: number;
+    totalNet: number;
+  } | null;
+  clockedIn: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    position: string;
+    clockInAt: string;
+  }[];
 }
 
 export interface InventoryItem {
@@ -417,7 +597,11 @@ export type ReportType =
   | "EXPENSES"
   | "SERVICES"
   | "WASH_JOBS"
-  | "RECEIPTS";
+  | "RECEIPTS"
+  | "ATTENDANCE"
+  | "LEAVE"
+  | "PAYROLL"
+  | "OVERTIME";
 
 export type ReportPeriod = "today" | "yesterday" | "week" | "month" | "year" | "custom";
 

@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import { settingsService } from "@/services/settings.service";
+import { usePermission } from "@/context/permission-context";
 import type { SettingsMap } from "@/types";
 
 function SettingsField({
@@ -43,6 +44,9 @@ function SettingsSection({ title, description, children }: { title: string; desc
 }
 
 export default function SettingsPage() {
+  const { hasPermission } = usePermission();
+  const canManage = hasPermission("settings:manage");
+
   const [settings, setSettings] = useState<SettingsMap | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -103,16 +107,25 @@ export default function SettingsPage() {
   return (
     <div className="space-y-6">
       <PageHeader title="Settings" description="Business information, receipts, preferences and security.">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => {
-            void settingsService.reset().then(setSettings).then(() => toast.success("Settings reset to defaults"));
-          }}
-        >
-          <RotateCcw /> Reset defaults
-        </Button>
+        {canManage ? (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              void settingsService.reset().then(setSettings).then(() => toast.success("Settings reset to defaults"));
+            }}
+          >
+            <RotateCcw /> Reset defaults
+          </Button>
+        ) : null}
       </PageHeader>
+
+      {!canManage ? (
+        <div className="flex items-center gap-2 rounded-2xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-700">
+          <ShieldCheck className="size-4 shrink-0" />
+          You have read-only access to settings. Only the Owner can change business configuration.
+        </div>
+      ) : null}
 
       <Tabs defaultValue="business">
         <TabsList className="w-full justify-start overflow-x-auto rounded-2xl border border-border/60 bg-card p-1 sm:w-auto">
@@ -133,7 +146,8 @@ export default function SettingsPage() {
         <TabsContent value="business" className="mt-5 space-y-5">
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
             <SettingsSection title="Business information" description="Shown on receipts, reports and the login screen.">
-              <div className="grid gap-4 sm:grid-cols-2">
+              <fieldset disabled={!canManage} className="contents">
+                <div className="grid gap-4 sm:grid-cols-2">
                 <SettingsField label="Company name">
                   <Input value={settings["business.name"]} onChange={(e) => set("business.name", e.target.value)} />
                 </SettingsField>
@@ -162,12 +176,15 @@ export default function SettingsPage() {
                     <Input value={settings["business.hours"]} onChange={(e) => set("business.hours", e.target.value)} />
                   </SettingsField>
                 </div>
-              </div>
-              <div className="mt-5 flex justify-end">
-                <Button size="sm" onClick={() => void save(["business.name", "business.phone", "business.email", "business.taxNumber", "business.currency", "business.timezone", "business.address", "business.hours"])}>
-                  {saveIcon} Save business info
-                </Button>
-              </div>
+                </div>
+              </fieldset>
+              {canManage ? (
+                <div className="mt-5 flex justify-end">
+                  <Button size="sm" onClick={() => void save(["business.name", "business.phone", "business.email", "business.taxNumber", "business.currency", "business.timezone", "business.address", "business.hours"])}>
+                    {saveIcon} Save business info
+                  </Button>
+                </div>
+              ) : null}
             </SettingsSection>
           </motion.div>
 
@@ -191,34 +208,38 @@ export default function SettingsPage() {
         <TabsContent value="receipts" className="mt-5">
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
             <SettingsSection title="Receipt settings" description="How receipts are numbered and presented.">
-              <div className="grid gap-4 sm:grid-cols-2">
-                <SettingsField label="Receipt prefix" hint="e.g. RCP">
-                  <Input value={settings["receipt.prefix"]} onChange={(e) => set("receipt.prefix", e.target.value)} />
-                </SettingsField>
-                <SettingsField label="Number format" hint="Supports {date} and {seq:N} placeholders">
-                  <Input value={settings["receipt.numberFormat"]} onChange={(e) => set("receipt.numberFormat", e.target.value)} />
-                </SettingsField>
-                <div className="sm:col-span-2">
-                  <SettingsField label="Receipt footer">
-                    <Textarea value={settings["receipt.footer"]} onChange={(e) => set("receipt.footer", e.target.value)} rows={2} />
+              <fieldset disabled={!canManage} className="contents">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <SettingsField label="Receipt prefix" hint="e.g. RCP">
+                    <Input value={settings["receipt.prefix"]} onChange={(e) => set("receipt.prefix", e.target.value)} />
+                  </SettingsField>
+                  <SettingsField label="Number format" hint="Supports {date} and {seq:N} placeholders">
+                    <Input value={settings["receipt.numberFormat"]} onChange={(e) => set("receipt.numberFormat", e.target.value)} />
+                  </SettingsField>
+                  <div className="sm:col-span-2">
+                    <SettingsField label="Receipt footer">
+                      <Textarea value={settings["receipt.footer"]} onChange={(e) => set("receipt.footer", e.target.value)} rows={2} />
+                    </SettingsField>
+                  </div>
+                  <SettingsField label="Show tax on receipts">
+                    <select
+                      value={settings["receipt.showTax"]}
+                      onChange={(e) => set("receipt.showTax", e.target.value)}
+                      className="h-9.5 w-full rounded-xl border border-border/70 bg-background px-3 text-sm focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/30"
+                    >
+                      <option value="true">Yes — show tax lines</option>
+                      <option value="false">No — hide tax lines</option>
+                    </select>
                   </SettingsField>
                 </div>
-                <SettingsField label="Show tax on receipts">
-                  <select
-                    value={settings["receipt.showTax"]}
-                    onChange={(e) => set("receipt.showTax", e.target.value)}
-                    className="h-9.5 w-full rounded-xl border border-border/70 bg-background px-3 text-sm focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/30"
-                  >
-                    <option value="true">Yes — show tax lines</option>
-                    <option value="false">No — hide tax lines</option>
-                  </select>
-                </SettingsField>
-              </div>
-              <div className="mt-5 flex justify-end">
-                <Button size="sm" onClick={() => void save(["receipt.prefix", "receipt.numberFormat", "receipt.footer", "receipt.showTax"])}>
-                  {saveIcon} Save receipt settings
-                </Button>
-              </div>
+              </fieldset>
+              {canManage ? (
+                <div className="mt-5 flex justify-end">
+                  <Button size="sm" onClick={() => void save(["receipt.prefix", "receipt.numberFormat", "receipt.footer", "receipt.showTax"])}>
+                    {saveIcon} Save receipt settings
+                  </Button>
+                </div>
+              ) : null}
             </SettingsSection>
           </motion.div>
         </TabsContent>
@@ -226,49 +247,53 @@ export default function SettingsPage() {
         <TabsContent value="preferences" className="mt-5">
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
             <SettingsSection title="System preferences" description="Theme, language and data management.">
-              <div className="grid gap-4 sm:grid-cols-2">
-                <SettingsField label="Theme">
-                  <select
-                    value={settings["prefs.theme"]}
-                    onChange={(e) => set("prefs.theme", e.target.value)}
-                    className="h-9.5 w-full rounded-xl border border-border/70 bg-background px-3 text-sm focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/30"
-                  >
-                    <option value="light">Light</option>
-                    <option value="dark">Dark</option>
-                    <option value="system">System</option>
-                  </select>
-                </SettingsField>
-                <SettingsField label="Language">
-                  <select
-                    value={settings["prefs.language"]}
-                    onChange={(e) => set("prefs.language", e.target.value)}
-                    className="h-9.5 w-full rounded-xl border border-border/70 bg-background px-3 text-sm focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/30"
-                  >
-                    <option value="en">English</option>
-                    <option value="ny">Nyanja</option>
-                    <option value="bem">Bemba</option>
-                  </select>
-                </SettingsField>
-                <SettingsField label="Date format">
-                  <Input value={settings["prefs.dateFormat"]} onChange={(e) => set("prefs.dateFormat", e.target.value)} />
-                </SettingsField>
-                <SettingsField label="Backup frequency">
-                  <select
-                    value={settings["prefs.backupFrequency"]}
-                    onChange={(e) => set("prefs.backupFrequency", e.target.value)}
-                    className="h-9.5 w-full rounded-xl border border-border/70 bg-background px-3 text-sm focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/30"
-                  >
-                    <option value="daily">Daily</option>
-                    <option value="weekly">Weekly</option>
-                    <option value="monthly">Monthly</option>
-                  </select>
-                </SettingsField>
-              </div>
-              <div className="mt-5 flex justify-end">
-                <Button size="sm" onClick={() => void save(["prefs.theme", "prefs.language", "prefs.dateFormat", "prefs.backupFrequency"])}>
-                  {saveIcon} Save preferences
-                </Button>
-              </div>
+              <fieldset disabled={!canManage} className="contents">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <SettingsField label="Theme">
+                    <select
+                      value={settings["prefs.theme"]}
+                      onChange={(e) => set("prefs.theme", e.target.value)}
+                      className="h-9.5 w-full rounded-xl border border-border/70 bg-background px-3 text-sm focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/30"
+                    >
+                      <option value="light">Light</option>
+                      <option value="dark">Dark</option>
+                      <option value="system">System</option>
+                    </select>
+                  </SettingsField>
+                  <SettingsField label="Language">
+                    <select
+                      value={settings["prefs.language"]}
+                      onChange={(e) => set("prefs.language", e.target.value)}
+                      className="h-9.5 w-full rounded-xl border border-border/70 bg-background px-3 text-sm focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/30"
+                    >
+                      <option value="en">English</option>
+                      <option value="ny">Nyanja</option>
+                      <option value="bem">Bemba</option>
+                    </select>
+                  </SettingsField>
+                  <SettingsField label="Date format">
+                    <Input value={settings["prefs.dateFormat"]} onChange={(e) => set("prefs.dateFormat", e.target.value)} />
+                  </SettingsField>
+                  <SettingsField label="Backup frequency">
+                    <select
+                      value={settings["prefs.backupFrequency"]}
+                      onChange={(e) => set("prefs.backupFrequency", e.target.value)}
+                      className="h-9.5 w-full rounded-xl border border-border/70 bg-background px-3 text-sm focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/30"
+                    >
+                      <option value="daily">Daily</option>
+                      <option value="weekly">Weekly</option>
+                      <option value="monthly">Monthly</option>
+                    </select>
+                  </SettingsField>
+                </div>
+              </fieldset>
+              {canManage ? (
+                <div className="mt-5 flex justify-end">
+                  <Button size="sm" onClick={() => void save(["prefs.theme", "prefs.language", "prefs.dateFormat", "prefs.backupFrequency"])}>
+                    {saveIcon} Save preferences
+                  </Button>
+                </div>
+              ) : null}
             </SettingsSection>
           </motion.div>
         </TabsContent>
@@ -276,39 +301,43 @@ export default function SettingsPage() {
         <TabsContent value="security" className="mt-5">
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
             <SettingsSection title="Security settings" description="Password policy, sessions and two-factor authentication.">
-              <div className="grid gap-4 sm:grid-cols-2">
-                <SettingsField label="Password policy">
-                  <select
-                    value={settings["security.passwordPolicy"]}
-                    onChange={(e) => set("security.passwordPolicy", e.target.value)}
-                    className="h-9.5 w-full rounded-xl border border-border/70 bg-background px-3 text-sm focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/30"
-                  >
-                    <option value="basic">Basic — 6+ characters</option>
-                    <option value="medium">Medium — 8+ characters, letters & numbers</option>
-                    <option value="strong">Strong — 10+ characters, symbols required</option>
-                  </select>
-                </SettingsField>
-                <SettingsField label="Session timeout (minutes)">
-                  <Input type="number" value={settings["security.sessionTimeout"]} onChange={(e) => set("security.sessionTimeout", e.target.value)} />
-                </SettingsField>
-                <div className="sm:col-span-2">
-                  <SettingsField label="Two-factor authentication" hint="Coming in a future release">
+              <fieldset disabled={!canManage} className="contents">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <SettingsField label="Password policy">
                     <select
-                      value={settings["security.twoFactorEnabled"]}
-                      onChange={(e) => set("security.twoFactorEnabled", e.target.value)}
+                      value={settings["security.passwordPolicy"]}
+                      onChange={(e) => set("security.passwordPolicy", e.target.value)}
                       className="h-9.5 w-full rounded-xl border border-border/70 bg-background px-3 text-sm focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/30"
                     >
-                      <option value="false">Disabled (placeholder)</option>
-                      <option value="true">Enabled (placeholder)</option>
+                      <option value="basic">Basic — 6+ characters</option>
+                      <option value="medium">Medium — 8+ characters, letters & numbers</option>
+                      <option value="strong">Strong — 10+ characters, symbols required</option>
                     </select>
                   </SettingsField>
+                  <SettingsField label="Session timeout (minutes)">
+                    <Input type="number" value={settings["security.sessionTimeout"]} onChange={(e) => set("security.sessionTimeout", e.target.value)} />
+                  </SettingsField>
+                  <div className="sm:col-span-2">
+                    <SettingsField label="Two-factor authentication" hint="Coming in a future release">
+                      <select
+                        value={settings["security.twoFactorEnabled"]}
+                        onChange={(e) => set("security.twoFactorEnabled", e.target.value)}
+                        className="h-9.5 w-full rounded-xl border border-border/70 bg-background px-3 text-sm focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/30"
+                      >
+                        <option value="false">Disabled (placeholder)</option>
+                        <option value="true">Enabled (placeholder)</option>
+                      </select>
+                    </SettingsField>
+                  </div>
                 </div>
-              </div>
-              <div className="mt-5 flex justify-end">
-                <Button size="sm" onClick={() => void save(["security.passwordPolicy", "security.sessionTimeout", "security.twoFactorEnabled"])}>
-                  {saveIcon} Save security settings
-                </Button>
-              </div>
+              </fieldset>
+              {canManage ? (
+                <div className="mt-5 flex justify-end">
+                  <Button size="sm" onClick={() => void save(["security.passwordPolicy", "security.sessionTimeout", "security.twoFactorEnabled"])}>
+                    {saveIcon} Save security settings
+                  </Button>
+                </div>
+              ) : null}
             </SettingsSection>
           </motion.div>
         </TabsContent>

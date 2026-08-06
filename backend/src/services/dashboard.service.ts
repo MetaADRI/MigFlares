@@ -1,5 +1,8 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "../config/database.js";
+import { getTodaySummary } from "./attendance.service.js";
+import { getPendingLeaveCount } from "./leave.service.js";
+import { paydayReminders } from "./payroll.service.js";
 
 function rangeFilter(from: Date, to?: Date): Prisma.WashRecordWhereInput {
   const field = "completedAt" as const;
@@ -289,5 +292,50 @@ export async function getInsights(branchId: string | null) {
     })),
     serviceDistribution: serviceDistribution.sort((a, b) => b.revenue - a.revenue),
     activeEmployees,
+  };
+}
+
+/** Staff snapshot for dashboard widgets — attendance today, pending leave, payday. */
+export async function getStaffSnapshot(branchId: string | null) {
+  const now = new Date();
+  const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+
+  const [attendance, pendingLeave, payday, currentRun, clockedIn] = await Promise.all([
+    getTodaySummary(branchId),
+    getPendingLeaveCount(branchId),
+    paydayReminders(branchId),
+    prisma.payrollRun.findFirst({
+      where: { branchId, periodMonth: monthKey },
+      include: { _count: { select: { payslips: true } } },
+    }),
+    prisma.timeEntry.findMany({
+      where: { clockOutAt: null, ...(branchId ? { branchId } : {}) },
+      include: { employee: { select: { id: true, firstName: true, lastName: true, position: true } } },
+      orderBy: { clockInAt: "asc" },
+      take: 12,
+    }),
+  ]);
+
+  return {
+    attendance,
+    pendingLeave,
+    payday,
+    currentRun: currentRun
+      ? {
+          id: currentRun.id,
+          periodMonth: currentRun.periodMonth,
+          status: currentRun.status,
+          payslipCount: currentRun._count.payslips,
+          employeeCount: currentRun.employeeCount,
+          totalNet: Number(currentRun.totalNet),
+        }
+      : null,
+    clockedIn: clockedIn.map((e) => ({
+      id: e.employee.id,
+      firstName: e.employee.firstName,
+      lastName: e.employee.lastName,
+      position: e.employee.position,
+      clockInAt: e.clockInAt.toISOString(),
+    })),
   };
 }

@@ -30,3 +30,9 @@ backend/prisma/*.db
 Thumbs.db
 .vscode/
 .idea/
+
+# Business documents
+PROPOSAL.md
+
+# Screenshots
+*.png

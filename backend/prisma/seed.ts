@@ -35,6 +35,16 @@ const daysAgo = (n: number, hour = 9, minute = 30): Date => {
 const pad4 = (n: number) => String(n).padStart(4, "0");
 const datePart = (d: Date) => d.toISOString().slice(0, 10).replace(/-/g, "");
 
+/** Local start-of-day (midnight) — matches how the backend stores AttendanceRecord.date. */
+const startOfDayLocal = (d: Date): Date => {
+  const c = new Date(d);
+  c.setHours(0, 0, 0, 0);
+  return c;
+};
+
+/** "2026-07" style month key for a date. */
+const monthKey = (d: Date): string => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+
 /* ----------------------- Permission catalog -------------------------- */
 
 const PERMISSIONS: { key: string; module: string; name: string; description: string }[] = [
@@ -67,6 +77,12 @@ const PERMISSIONS: { key: string; module: string; name: string; description: str
   { key: "users:view", module: "USERS", name: "View users & roles", description: "See roles, permissions and users" },
   { key: "users:manage", module: "USERS", name: "Manage users & roles", description: "Create roles and assign permissions" },
   { key: "support:view", module: "SUPPORT", name: "Help & support", description: "Access the help centre" },
+  { key: "attendance:view", module: "ATTENDANCE", name: "View attendance", description: "See attendance and shift records" },
+  { key: "attendance:manage", module: "ATTENDANCE", name: "Manage attendance", description: "Correct shifts, mark attendance, clock others out" },
+  { key: "leave:view", module: "LEAVE", name: "View leave", description: "Browse leave requests and balances" },
+  { key: "leave:manage", module: "LEAVE", name: "Manage leave", description: "Approve or reject leave requests" },
+  { key: "payroll:view", module: "PAYROLL", name: "View payroll", description: "See payroll runs and payslips" },
+  { key: "payroll:manage", module: "PAYROLL", name: "Manage payroll", description: "Generate runs, edit payslips, mark paid" },
 ];
 
 const ALL_KEYS = PERMISSIONS.map((p) => p.key);
@@ -89,6 +105,9 @@ const ROLES: { name: RoleName; description: string; permissions: string[] }[] = 
       "receipts:view", "receipts:manage",
       "reports:view", "analytics:view", "notifications:view",
       "settings:view", "audit-logs:view", "users:view", "support:view",
+      "attendance:view", "attendance:manage",
+      "leave:view", "leave:manage",
+      "payroll:view", "payroll:manage",
     ],
   },
   {
@@ -103,6 +122,7 @@ const ROLES: { name: RoleName; description: string; permissions: string[] }[] = 
       "services:view",
       "receipts:view", "receipts:manage",
       "notifications:view", "support:view",
+      "attendance:view", "leave:view", "payroll:view",
     ],
   },
   {
@@ -116,6 +136,7 @@ const ROLES: { name: RoleName; description: string; permissions: string[] }[] = 
       "bookings:view", "bookings:manage",
       "services:view",
       "notifications:view", "support:view",
+      "attendance:view", "leave:view", "payroll:view",
     ],
   },
 ];
@@ -149,6 +170,7 @@ const USERS: { username: string; password: string; fullName: string; email: stri
   { username: "admin", password: "admin123", fullName: "Mig Flares", email: "owner@migflares.co.zm", phone: "+260 977 000 001", role: "OWNER" },
   { username: "manager", password: "manager123", fullName: "Chanda Mulenga", email: "manager@migflares.co.zm", phone: "+260 977 222 333", role: "MANAGER" },
   { username: "cashier", password: "cashier123", fullName: "Peter Zimba", email: "cashier@migflares.co.zm", phone: "+260 955 666 778", role: "CASHIER" },
+  { username: "attendant", password: "attendant123", fullName: "Collins Sakala", email: "attendant@migflares.co.zm", phone: "+260 966 456 789", role: "ATTENDANT" },
 ];
 
 /* ------------------------------ Services ----------------------------- */
@@ -239,6 +261,12 @@ interface SeedEmployee {
   emergencyContact: { name: string; phone: string; relation: string } | null;
   notes: string | null;
   isActive?: boolean;
+  username?: string; // links the employee to a seeded login user (self-service)
+  employmentType?: "FULL_TIME" | "PART_TIME" | "CONTRACT" | "CASUAL";
+  payday?: number;
+  payrollEnabled?: boolean;
+  attendanceRequired?: boolean;
+  overtimeEligible?: boolean;
 }
 
 const EMPLOYEES: SeedEmployee[] = [
@@ -247,7 +275,7 @@ const EMPLOYEES: SeedEmployee[] = [
   { firstName: "Kabaso", lastName: "Daka", position: "Attendant", phone: "+260 955 333 445", email: null, nrcNumber: "864209/33/1", hireDaysAgo: 420, salary: 3000, emergencyContact: { name: "Grace Daka", phone: "+260 977 333 334", relation: "Mother" }, notes: null },
   { firstName: "Misozi", lastName: "Chanda", position: "Detailer", phone: "+260 977 444 556", email: "misozi@migflares.co.zm", nrcNumber: "975310/22/1", hireDaysAgo: 380, salary: 3800, emergencyContact: null, notes: "Certified in hot-water extraction." },
   { firstName: "Bupe", lastName: "Kasonde", position: "Detailer", phone: "+260 966 555 667", email: null, nrcNumber: "642097/11/1", hireDaysAgo: 300, salary: 3600, emergencyContact: { name: "Joseph Kasonde", phone: "+260 955 555 556", relation: "Father" }, notes: null },
-  { firstName: "Peter", lastName: "Zimba", position: "Cashier", phone: "+260 955 666 778", email: null, nrcNumber: "501234/88/1", hireDaysAgo: 250, salary: 3200, emergencyContact: null, notes: "Handles the till and receipts." },
+  { firstName: "Peter", lastName: "Zimba", position: "Cashier", phone: "+260 955 666 778", email: null, nrcNumber: "501234/88/1", hireDaysAgo: 250, salary: 3200, emergencyContact: null, notes: "Handles the till and receipts.", username: "cashier" },
   { firstName: "Martha", lastName: "Sichone", position: "Supervisor", phone: "+260 977 777 889", email: "martha@migflares.co.zm", nrcNumber: "398765/77/1", hireDaysAgo: 200, salary: 5500, emergencyContact: { name: "Brian Sichone", phone: "+260 966 777 778", relation: "Husband" }, notes: "Runs shift scheduling.", isActive: false },
   { firstName: "Mutinta", lastName: "Bwalya", position: "Attendant", phone: "+260 977 888 990", email: null, nrcNumber: "210987/66/1", hireDaysAgo: 180, salary: 2800, emergencyContact: null, notes: null },
   { firstName: "Chomba", lastName: "Chileshe", position: "Attendant", phone: "+260 966 999 001", email: null, nrcNumber: "109876/55/1", hireDaysAgo: 160, salary: 2800, emergencyContact: { name: "Luyando Chileshe", phone: "+260 955 999 990", relation: "Sister" }, notes: null },
@@ -255,13 +283,14 @@ const EMPLOYEES: SeedEmployee[] = [
   { firstName: "Namwinga", lastName: "Phiri", position: "Attendant", phone: "+260 977 123 456", email: null, nrcNumber: "765432/33/1", hireDaysAgo: 130, salary: 2800, emergencyContact: null, notes: null },
   { firstName: "Moses", lastName: "Zulu", position: "Lead Attendant", phone: "+260 966 234 567", email: "moses@migflares.co.zm", nrcNumber: "654321/22/1", hireDaysAgo: 120, salary: 4200, emergencyContact: { name: "Ruth Zulu", phone: "+260 955 234 566", relation: "Wife" }, notes: null },
   { firstName: "Precious", lastName: "Mwamba", position: "Cashier", phone: "+260 977 345 678", email: null, nrcNumber: "543210/11/1", hireDaysAgo: 110, salary: 3200, emergencyContact: null, notes: null },
-  { firstName: "Collins", lastName: "Sakala", position: "Attendant", phone: "+260 966 456 789", email: null, nrcNumber: "432109/99/1", hireDaysAgo: 100, salary: 2800, emergencyContact: null, notes: null },
+  { firstName: "Collins", lastName: "Sakala", position: "Attendant", phone: "+260 966 456 789", email: null, nrcNumber: "432109/99/1", hireDaysAgo: 100, salary: 2800, emergencyContact: null, notes: null, username: "attendant", payday: 25, employmentType: "FULL_TIME" },
   { firstName: "Charity", lastName: "Lungu", position: "Supervisor", phone: "+260 955 567 890", email: "charity@migflares.co.zm", nrcNumber: "321098/88/1", hireDaysAgo: 90, salary: 5500, emergencyContact: { name: "Joseph Lungu", phone: "+260 977 567 889", relation: "Husband" }, notes: null },
   { firstName: "Victor", lastName: "Nyirenda", position: "Attendant", phone: "+260 977 678 901", email: null, nrcNumber: "210987/77/1", hireDaysAgo: 80, salary: 2800, emergencyContact: null, notes: "Night-shift preference." },
   { firstName: "Esther", lastName: "Simukonda", position: "Detailer", phone: "+260 966 789 012", email: "esther@migflares.co.zm", nrcNumber: "109876/66/1", hireDaysAgo: 70, salary: 3600, emergencyContact: null, notes: null },
   { firstName: "Daliso", lastName: "Mbewe", position: "Attendant", phone: "+260 955 890 123", email: null, nrcNumber: "987654/55/1", hireDaysAgo: 60, salary: 2800, emergencyContact: { name: "Agnes Mbewe", phone: "+260 977 890 122", relation: "Mother" }, notes: null },
   { firstName: "Memory", lastName: "Chisanga", position: "Cashier", phone: "+260 977 901 234", email: null, nrcNumber: "876543/45/1", hireDaysAgo: 50, salary: 3200, emergencyContact: null, notes: null },
   { firstName: "Henry", lastName: "Kasonde", position: "Attendant", phone: "+260 966 012 345", email: null, nrcNumber: "765432/34/1", hireDaysAgo: 40, salary: 2800, emergencyContact: null, notes: null },
+  { firstName: "Chanda", lastName: "Mulenga", position: "Manager", phone: "+260 977 222 333", email: "manager@migflares.co.zm", nrcNumber: "112233/77/1", hireDaysAgo: 320, salary: 7000, emergencyContact: { name: "Natasha Mulenga", phone: "+260 966 222 332", relation: "Wife" }, notes: "Branch manager — oversees shifts and payroll.", username: "manager", payday: 25, employmentType: "FULL_TIME" },
 ];
 
 /* ------------------------- Reference datasets ------------------------ */
@@ -373,6 +402,11 @@ async function main() {
   await prisma.vehicle.deleteMany({});
   await prisma.customer.deleteMany({});
   await prisma.inventoryItem.deleteMany({});
+  await prisma.payslip.deleteMany({});
+  await prisma.payrollRun.deleteMany({});
+  await prisma.payrollRule.deleteMany({});
+  await prisma.leaveRequest.deleteMany({});
+  await prisma.attendanceRecord.deleteMany({});
   await prisma.employee.deleteMany({});
   await prisma.service.deleteMany({});
   console.log("[seed] Reset transactional tables");
@@ -519,9 +553,15 @@ async function main() {
     position: e.position,
     hireDate: daysAgo(e.hireDaysAgo),
     salary: e.salary,
+    payday: e.payday ?? 25,
+    employmentType: e.employmentType ?? "FULL_TIME",
+    payrollEnabled: e.payrollEnabled ?? true,
+    attendanceRequired: e.attendanceRequired ?? true,
+    overtimeEligible: e.overtimeEligible ?? true,
     emergencyContact: e.emergencyContact as unknown as Prisma.InputJsonValue,
     notes: e.notes,
     isActive: e.isActive ?? true,
+    userId: e.username ? (users[e.username] ?? null) : null,
     branchId,
   }));
   await prisma.employee.createMany({ data: employeeRows });
@@ -788,6 +828,201 @@ async function main() {
   ];
   await prisma.auditLog.createMany({ data: auditRows });
   console.log(`[seed] ${auditRows.length} audit logs ready`);
+
+  // ---- Payroll rule (one global rule per branch) ----
+  const rule = await prisma.payrollRule.upsert({
+    where: { branchId },
+    update: {
+      name: "Mig Flares Default",
+      startTime: "08:00",
+      graceMinutes: 15,
+      standardMinutesPerDay: 480,
+      overtimeRate: 1.5,
+      dailyOvertimeThresholdMin: 600,
+      defaultPayday: 25,
+      bonusEnabled: true,
+      overtimeEnabled: true,
+      allowancesEnabled: true,
+      deductionUniform: 150,
+      deductionMeals: 250,
+      updatedById: adminId,
+    },
+    create: {
+      branchId,
+      name: "Mig Flares Default",
+      startTime: "08:00",
+      graceMinutes: 15,
+      standardMinutesPerDay: 480,
+      overtimeRate: 1.5,
+      dailyOvertimeThresholdMin: 600,
+      defaultPayday: 25,
+      bonusEnabled: true,
+      overtimeEnabled: true,
+      allowancesEnabled: true,
+      deductionUniform: 150,
+      deductionMeals: 250,
+      updatedById: adminId,
+    },
+  });
+  console.log("[seed] Payroll rule ready");
+
+  // ---- Attendance records (~30 days for active staff) ----
+  const activeEmployees = employeeRows.filter((e) => e.isActive);
+  const rngAtt = mulberry32(20260909);
+  const attendanceRows: Prisma.AttendanceRecordCreateManyInput[] = [];
+  for (let dayOffset = 29; dayOffset >= 0; dayOffset--) {
+    const date = new Date();
+    date.setDate(date.getDate() - dayOffset);
+    const weekday = date.getDay();
+    const isWeekend = weekday === 0 || weekday === 6;
+    for (const emp of activeEmployees) {
+      if (isWeekend && (emp.position === "Manager" || emp.position === "Cashier")) continue;
+      const roll = rngAtt();
+      if (roll < 0.05) {
+        attendanceRows.push({
+          employeeId: emp.id,
+          date: startOfDayLocal(date),
+          status: "ABSENT",
+          source: "SEED",
+          branchId,
+        });
+        continue;
+      }
+      const late = roll > 0.9;
+      const clockIn = new Date(date);
+      clockIn.setHours(7, 45, 0, 0);
+      clockIn.setMinutes(
+        clockIn.getMinutes() + (late ? 20 + Math.floor(rngAtt() * 30) : Math.floor(rngAtt() * 20)),
+      );
+      const shiftMin = 480 + Math.floor(rngAtt() * (late ? 40 : 90));
+      const clockOut = new Date(clockIn.getTime() + shiftMin * 60_000);
+      const totalMin = Math.round((clockOut.getTime() - clockIn.getTime()) / 60_000);
+      const overtimeMin = Math.max(0, totalMin - 600);
+      attendanceRows.push({
+        employeeId: emp.id,
+        date: startOfDayLocal(date),
+        status: late ? "LATE" : "PRESENT",
+        clockInAt: clockIn,
+        clockOutAt: clockOut,
+        hoursWorked: Math.round(((totalMin - overtimeMin) / 60) * 100) / 100,
+        overtimeHours: Math.round((overtimeMin / 60) * 100) / 100,
+        overtimeMinutes: overtimeMin,
+        source: "SEED",
+        branchId,
+      });
+    }
+  }
+  await prisma.attendanceRecord.createMany({ data: attendanceRows });
+  console.log(`[seed] ${attendanceRows.length} attendance records ready`);
+
+  // ---- Leave requests ----
+  const leaveRows: Prisma.LeaveRequestCreateManyInput[] = [
+    { id: randomUUID(), employeeId: activeEmployees[0].id, type: "ANNUAL", startDate: daysAgo(40), endDate: daysAgo(38), days: 2, status: "APPROVED", reason: "Family wedding in Ndola", reviewedById: adminId, reviewedAt: daysAgo(41), branchId },
+    { id: randomUUID(), employeeId: activeEmployees[3].id, type: "SICK", startDate: daysAgo(15), endDate: daysAgo(15), days: 1, status: "APPROVED", reason: "Malaria — medical certificate attached", reviewedById: adminId, reviewedAt: daysAgo(14), branchId },
+    { id: randomUUID(), employeeId: activeEmployees[5].id, type: "ANNUAL", startDate: daysAgo(9), endDate: daysAgo(5), days: 5, status: "APPROVED", reason: "Annual leave", reviewedById: adminId, reviewedAt: daysAgo(12), branchId },
+    { id: randomUUID(), employeeId: activeEmployees[2].id, type: "UNPAID", startDate: daysAgo(3), endDate: daysAgo(1), days: 3, status: "REJECTED", reason: "Personal errands", reviewedById: adminId, reviewedAt: daysAgo(4), reviewNote: "Understaffed that week — reschedule.", branchId },
+    { id: randomUUID(), employeeId: activeEmployees[7].id, type: "ANNUAL", startDate: daysAgo(2), endDate: daysAgo(2), days: 1, status: "PENDING", reason: "School event for my daughter", branchId },
+    { id: randomUUID(), employeeId: activeEmployees[1].id, type: "ANNUAL", startDate: daysAgo(1), endDate: daysAgo(1), days: 1, status: "PENDING", reason: "Medical appointment", branchId },
+  ];
+  await prisma.leaveRequest.createMany({ data: leaveRows });
+  console.log(`[seed] ${leaveRows.length} leave requests ready`);
+
+  // ---- Payroll runs: previous month PAID, current month DRAFT ----
+  const now = new Date();
+  const currentMonth = monthKey(now);
+  const prevMonth = monthKey(new Date(now.getFullYear(), now.getMonth() - 1, 1));
+  const eligible = activeEmployees.filter((e) => e.payrollEnabled && Number(e.salary) > 0);
+  const rngPay = mulberry32(20260910);
+
+  const ruleSnapshot = {
+    name: rule.name,
+    startTime: rule.startTime,
+    graceMinutes: rule.graceMinutes,
+    standardMinutesPerDay: rule.standardMinutesPerDay,
+    overtimeRate: Number(rule.overtimeRate),
+    dailyOvertimeThresholdMin: rule.dailyOvertimeThresholdMin,
+    defaultPayday: rule.defaultPayday,
+    bonusEnabled: rule.bonusEnabled,
+    overtimeEnabled: rule.overtimeEnabled,
+    allowancesEnabled: rule.allowancesEnabled,
+    deductions: {
+      loan: Number(rule.deductionLoan),
+      damages: Number(rule.deductionDamages),
+      uniform: Number(rule.deductionUniform),
+      transport: Number(rule.deductionTransport),
+      meals: Number(rule.deductionMeals),
+      advances: Number(rule.deductionAdvances),
+      other: Number(rule.deductionOther),
+    },
+  };
+
+  async function buildRun(periodKey: string, runStatus: "DRAFT" | "PAID") {
+    const slips: Omit<Prisma.PayslipCreateManyInput, "runId">[] = [];
+    let totalGross = 0;
+    let totalDeductions = 0;
+    let totalNet = 0;
+    for (const emp of eligible) {
+      const hourly = Number(emp.salary) / 26 / 8;
+      const otHours = Math.round(rngPay() * 12 * 100) / 100;
+      const otAmount = Math.round(otHours * hourly * 1.5 * 100) / 100;
+      const bonus = Number(emp.salary) >= 5000 ? 300 : 150;
+      const allowances = 250;
+      const gross = Math.round((Number(emp.salary) + otAmount + bonus + allowances) * 100) / 100;
+      const deductionUniform = 150;
+      const deductionMeals = 250;
+      const totalDed = deductionUniform + deductionMeals;
+      const net = Math.round((gross - totalDed) * 100) / 100;
+      totalGross += gross;
+      totalDeductions += totalDed;
+      totalNet += net;
+      slips.push({
+        id: randomUUID(),
+        employeeId: emp.id,
+        baseSalary: Number(emp.salary),
+        overtimeHours: otHours,
+        overtimeAmount: otAmount,
+        bonusAmount: bonus,
+        allowancesAmount: allowances,
+        grossAmount: gross,
+        deductionUniform,
+        deductionMeals,
+        totalDeductions: totalDed,
+        netAmount: net,
+        workedDays: 22,
+        absentDays: 1,
+        leaveDays: 0,
+        status: runStatus === "PAID" ? "PAID" : "DRAFT",
+        paidAt: runStatus === "PAID" ? daysAgo(5) : null,
+        paymentMethod: runStatus === "PAID" ? "BANK_TRANSFER" : null,
+        branchId,
+      });
+    }
+    const run = await prisma.payrollRun.create({
+      data: {
+        branchId,
+        periodMonth: periodKey,
+        status: runStatus,
+        ruleSnapshot: ruleSnapshot as unknown as Prisma.InputJsonValue,
+        totalGross: Math.round(totalGross * 100) / 100,
+        totalDeductions: Math.round(totalDeductions * 100) / 100,
+        totalNet: Math.round(totalNet * 100) / 100,
+        employeeCount: eligible.length,
+        generatedById: adminId,
+        processedById: adminId,
+        processedAt: runStatus === "PAID" ? daysAgo(10) : daysAgo(1),
+        paidById: adminId,
+        paidAt: runStatus === "PAID" ? daysAgo(5) : null,
+      },
+    });
+    await prisma.payslip.createMany({
+      data: slips.map((s) => ({ ...s, runId: run.id })),
+    });
+    return run;
+  }
+
+  await buildRun(prevMonth, "PAID");
+  await buildRun(currentMonth, "DRAFT");
+  console.log(`[seed] Payroll runs ready (${prevMonth} PAID, ${currentMonth} DRAFT)`);
 
   console.log("[seed] Done ✔");
   console.log("[seed] Sign-in: admin / admin123 · manager / manager123 · cashier / cashier123");

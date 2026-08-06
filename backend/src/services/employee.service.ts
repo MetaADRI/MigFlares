@@ -1,7 +1,8 @@
-import { Prisma, PaymentMethod } from "@prisma/client";
+import { Prisma, PaymentMethod, EmploymentType } from "@prisma/client";
 import { prisma } from "../config/database.js";
 import { ApiError } from "../utils/api-error.js";
 import { buildPageMeta, getPagination } from "../utils/pagination.js";
+import * as attendanceService from "./attendance.service.js";
 
 export interface EmployeeListQuery {
   page?: number;
@@ -31,6 +32,11 @@ export interface EmployeeInput {
   salary?: number | null;
   emergencyContact?: EmergencyContactInput | null;
   notes?: string | null;
+  payday?: number | null;
+  employmentType?: EmploymentType;
+  payrollEnabled?: boolean;
+  attendanceRequired?: boolean;
+  overtimeEligible?: boolean;
 }
 
 const startOfDay = (d: Date) => {
@@ -75,6 +81,11 @@ function serialize(
       : null,
     notes: e.notes,
     isActive: e.isActive,
+    payday: e.payday,
+    employmentType: e.employmentType,
+    payrollEnabled: e.payrollEnabled,
+    attendanceRequired: e.attendanceRequired,
+    overtimeEligible: e.overtimeEligible,
     washesToday: 0, // filled by list/get with today's count
     totalWashes: e._count.washRecords,
     expensesCount: e.expenses.length,
@@ -205,6 +216,11 @@ export async function createEmployee(input: EmployeeInput, branchId: string | nu
         ? (input.emergencyContact as Prisma.InputJsonValue)
         : Prisma.JsonNull,
       notes: input.notes || null,
+      payday: input.payday ?? null,
+      employmentType: input.employmentType,
+      payrollEnabled: input.payrollEnabled,
+      attendanceRequired: input.attendanceRequired,
+      overtimeEligible: input.overtimeEligible,
       branchId,
     },
   });
@@ -232,6 +248,11 @@ export async function updateEmployee(id: string, input: EmployeeInput) {
           : Prisma.JsonNull,
       }),
       ...(input.notes !== undefined && { notes: input.notes || null }),
+      ...(input.payday !== undefined && { payday: input.payday }),
+      ...(input.employmentType !== undefined && { employmentType: input.employmentType }),
+      ...(input.payrollEnabled !== undefined && { payrollEnabled: input.payrollEnabled }),
+      ...(input.attendanceRequired !== undefined && { attendanceRequired: input.attendanceRequired }),
+      ...(input.overtimeEligible !== undefined && { overtimeEligible: input.overtimeEligible }),
     },
   });
   return getEmployee(employee.id);
@@ -406,6 +427,12 @@ export async function clockIn(id: string, branchId: string | null) {
   const entry = await prisma.timeEntry.create({
     data: { employeeId: id, clockInAt: new Date(), branchId },
   });
+  await attendanceService.markAttendance({
+    employeeId: id,
+    branchId,
+    source: "CLOCK_BUTTON",
+    timeEntryId: entry.id,
+  });
   return serializeTimeEntry(entry);
 }
 
@@ -429,6 +456,12 @@ export async function clockOut(id: string, notes?: string) {
       hoursWorked: new Prisma.Decimal(Number(hours.toFixed(2))),
       notes: notes || open.notes,
     },
+  });
+  await attendanceService.finalizeAttendance({
+    employeeId: id,
+    branchId: open.branchId ?? null,
+    timeEntryId: open.id,
+    clockOutAt,
   });
   return serializeTimeEntry(entry);
 }
