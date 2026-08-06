@@ -7,7 +7,6 @@ import { GuardedRoute } from "@/components/common/require-permission";
 import { useAuth } from "@/hooks/use-auth";
 
 const LoginPage = lazy(() => import("@/pages/auth/login-page"));
-const ForgotPasswordPage = lazy(() => import("@/pages/auth/forgot-password-page"));
 const DashboardPage = lazy(() => import("@/pages/dashboard/dashboard-page"));
 const CustomersPage = lazy(() => import("@/pages/customers/customers-page"));
 const VehiclesPage = lazy(() => import("@/pages/vehicles/vehicles-page"));
@@ -66,14 +65,6 @@ export function AppRoutes() {
             element={
               <PublicOnly>
                 <LoginPage />
-              </PublicOnly>
-            }
-          />
-          <Route
-            path="/forgot-password"
-            element={
-              <PublicOnly>
-                <ForgotPasswordPage />
               </PublicOnly>
             }
           />

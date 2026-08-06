@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { motion } from "framer-motion";
@@ -123,17 +123,9 @@ export default function LoginPage() {
           </div>
 
           <div className="space-y-2">
-            <div className="flex items-center justify-between">
-              <Label htmlFor="password" className="text-white/80">
-                Password
-              </Label>
-              <Link
-                to="/forgot-password"
-                className="text-xs font-medium text-orange-300 transition-colors hover:text-orange-200"
-              >
-                Forgot password?
-              </Link>
-            </div>
+            <Label htmlFor="password" className="text-white/80">
+              Password
+            </Label>
             <div className="relative">
               <Lock className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-white/35" />
               <input
