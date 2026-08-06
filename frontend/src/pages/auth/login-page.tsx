@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { motion } from "framer-motion";
+import axios from "axios";
 import { AlertCircle, ArrowRight, Eye, EyeOff, Lock, UserRound } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -12,6 +13,22 @@ import { useAuth } from "@/hooks/use-auth";
 import { loginSchema, type LoginInput } from "@/utils/validation";
 
 const REMEMBER_KEY = "mf_remember_username";
+
+/** Map any login failure to an honest, actionable message. */
+function loginErrorMessage(err: unknown): string {
+  if (axios.isAxiosError(err)) {
+    const status = err.response?.status;
+    if (status === 401) return "Invalid username or password. Please try again.";
+    if (status === 429) return "Too many attempts — please wait a few minutes and try again.";
+    if (status && status >= 500) {
+      return "The server is still starting up — please click Sign In again.";
+    }
+    if (!err.response) {
+      return "Can't reach the server yet (it may be starting up) — please click Sign In again.";
+    }
+  }
+  return "Sign in failed — please try again.";
+}
 
 function greeting(): string {
   const hour = new Date().getHours();
@@ -66,8 +83,8 @@ export default function LoginPage() {
       }
       toast.success("Welcome back!");
       navigate("/", { replace: true });
-    } catch {
-      const message = "Invalid username or password. Please try again.";
+    } catch (err) {
+      const message = loginErrorMessage(err);
       setServerError(message);
       toast.error(message);
     }

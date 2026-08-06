@@ -33,6 +33,7 @@ Thumbs.db
 
 # Business documents
 PROPOSAL.md
+*.pdf
 
 # Screenshots
 *.png
